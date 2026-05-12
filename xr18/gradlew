@@ -1,0 +1,4 @@
+#!/bin/bash
+DIRNAME="$(cd "$(dirname "$0")" && pwd)"
+JAVA_HOME="${JAVA_HOME:-$HOME/jdk-17.0.13+11}"
+exec "$JAVA_HOME/bin/java" -jar "$DIRNAME/gradle/wrapper/gradle-wrapper.jar" --gradle-user-home="$DIRNAME/.gradle" "$@"

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="WING Mixer Control"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Connection Status -->
+    <TextView
+        android:id="@+id/tv_connection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Not connected"
+        android:textSize="14sp"
+        android:textColor="#666"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- Device List -->
+    <ListView
+        android:id="@+id/list_devices"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- Status Text -->
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:text=""
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:scrollbars="vertical"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_discover"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Discover"/>
+
+        <Button
+            android:id="@+id/btn_connect"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Connect"/>
+
+        <Button
+            android:id="@+id/btn_read_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Read Status"/>
+
+    </LinearLayout>
+
+</LinearLayout>
