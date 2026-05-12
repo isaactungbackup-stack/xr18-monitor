@@ -115,31 +115,35 @@ class XR18RepositoryImpl(
         remoteJob = ioScope.launch {
             Log.d(TAG, "Starting query to ${device.ipAddress}:10024")
             
-            // Step 1: First send /xinfo to verify connection works
+            // Step 1: Send /xinfo to verify connection
             client?.傳送("/xinfo")
             Log.d(TAG, "SENT: /xinfo")
+            delay(500)
             
-            // Wait 3 seconds for /xinfo response
-            delay(3000)
-            
-            // Step 2: Then try /xremote subscription
+            // Step 2: Send /xremote to subscribe to periodic updates
+            // XR18 will send state updates every ~250ms when subscribed
             client?.傳送("/xremote")
-            Log.d(TAG, "SENT: /xremote")
+            Log.d(TAG, "SENT: /xremote subscription")
+            delay(500)
             
-            // Wait 5 seconds for any subscription data
-            delay(5000)
-            
-            // Step 3: Finally try individual channel queries
+            // Step 3: Query all channel main states (/ch/xx/mix = fader + on + pan)
+            // This matches X-air Edit's query pattern from pcap analysis
             for (ch in 1..16) {
                 val chStr = ch.toString().padStart(2, '0')
-                client?.傳送("/ch/$chStr/mix/fader")
-                Log.d(TAG, "SENT: /ch/$chStr/mix/fader")
-                delay(100)
+                client?.傳送("/ch/$chStr/mix")
+                delay(50)  // 50ms between queries to avoid flooding
             }
             
-            Log.d(TAG, "Query complete")
+            // Step 4: Query headamp (preamp) gain for all channels
+            for (ch in 1..16) {
+                val chStr = ch.toString().padStart(2, '0')
+                client?.傳送("/headamp/$chStr/gain")
+                delay(50)
+            }
             
-            // Keep sending /xremote every 8 seconds
+            Log.d(TAG, "Initial query complete, waiting for /xremote updates...")
+            
+            // Continue sending /xremote every 8 seconds to stay subscribed
             while (isActive) {
                 delay(8000)
                 client?.傳送("/xremote")
@@ -155,36 +159,69 @@ class XR18RepositoryImpl(
 
     private fun 更新頻道狀態(msg: OSCMessage) {
         val addr = msg.address
+        val args = msg.args
         
-        val chMatch = Regex("""/ch/(\d+)/""").find(addr) ?: return
-        val ch = chMatch.groupValues[1].toIntOrNull() ?: return
-        if (ch < 1 || ch > 16) return
-
-        val current = _state.value.channels.toMutableList()
-        val idx = ch - 1
-        if (idx >= current.size) return
-        val cs = current[idx]
-
-        when {
-            addr.endsWith("/mix/fader") && msg.args.isNotEmpty() -> {
-                val v = (msg.args[0] as? Number)?.toFloat() ?: return
-                current[idx] = cs.copy(fader = v, faderDb = ChannelState.faderToDb(v))
-            }
-            addr.endsWith("/mix/on") && msg.args.isNotEmpty() -> {
-                val v = (msg.args[0] as? Number)?.toInt() ?: return
-                current[idx] = cs.copy(muted = v == 0)
-            }
-            addr.endsWith("/mix/pan") && msg.args.isNotEmpty() -> {
-                val v = (msg.args[0] as? Number)?.toFloat() ?: return
-                current[idx] = cs.copy(pan = v)
-            }
-            addr.startsWith("/headamp") && addr.contains("/gain") && msg.args.isNotEmpty() -> {
-                val v = (msg.args[0] as? Number)?.toFloat() ?: return
-                current[idx] = cs.copy(preampGain = v)
-            }
+        // Handle /xremote subscription responses (batch updates)
+        if (addr == "/xremote" || addr.startsWith("/xremote")) {
+            Log.d(TAG, "/xremote update: ${args.size} args")
+            return
         }
-
-        _state.value = _state.value.copy(channels = current)
+        
+        // Handle /ch/xx/mix responses (fader, on, pan as blob)
+        val chMixMatch = Regex("^/ch/(\\d+)/mix$").find(addr)
+        if (chMixMatch != null) {
+            val ch = chMixMatch.groupValues[1].toIntOrNull() ?: return
+            if (ch < 1 || ch > 16) return
+            val idx = ch - 1
+            if (idx >= _state.value.channels.size) return
+            var cs = _state.value.channels[idx]
+            if (args.isNotEmpty()) {
+                val fader = (args[0] as? Number)?.toFloat() ?: 0.75f
+                cs = cs.copy(fader = fader, faderDb = ChannelState.faderToDb(fader))
+            }
+            if (args.size > 1) {
+                val on = (args[1] as? Number)?.toInt() ?: 1
+                cs = cs.copy(muted = on == 0)
+            }
+            if (args.size > 2) {
+                val pan = (args[2] as? Number)?.toFloat() ?: 0.5f
+                cs = cs.copy(pan = pan)
+            }
+            val current = _state.value.channels.toMutableList()
+            current[idx] = cs
+            _state.value = _state.value.copy(channels = current)
+            return
+        }
+        
+        // Handle /ch/xx/mix/fader
+        val faderMatch = Regex("^/ch/(\\d+)/mix/fader$").find(addr)
+        if (faderMatch != null) {
+            val ch = faderMatch.groupValues[1].toIntOrNull() ?: return
+            if (ch < 1 || ch > 16 || args.isEmpty()) return
+            val idx = ch - 1
+            if (idx >= _state.value.channels.size) return
+            val v = (args[0] as? Number)?.toFloat() ?: return
+            val current = _state.value.channels.toMutableList()
+            current[idx] = current[idx].copy(fader = v, faderDb = ChannelState.faderToDb(v))
+            _state.value = _state.value.copy(channels = current)
+            return
+        }
+        
+        // Handle /headamp/xx/gain
+        if (addr.startsWith("/headamp") && addr.contains("/gain") && args.isNotEmpty()) {
+            val parts = addr.split("/")
+            if (parts.size >= 3) {
+                val ch = parts[2].toIntOrNull() ?: return
+                if (ch < 1 || ch > 16) return
+                val idx = ch - 1
+                if (idx >= _state.value.channels.size) return
+                val v = (args[0] as? Number)?.toFloat() ?: return
+                val current = _state.value.channels.toMutableList()
+                current[idx] = current[idx].copy(preampGain = v)
+                _state.value = _state.value.copy(channels = current)
+            }
+            return
+        }
     }
 
     private fun 停止所有連線() {
