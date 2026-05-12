@@ -32,6 +32,7 @@ object DiscoveryHelper {
                 val socket = DatagramSocket()
                 socket.soTimeout = 2000
                 
+                // Build OSC /xinfo message - same as V1.0014
                 val pingMsg = buildOscPing()
                 val addr = InetAddress.getByName(ip)
                 val pkt = DatagramPacket(pingMsg, pingMsg.size, addr, 10023)
