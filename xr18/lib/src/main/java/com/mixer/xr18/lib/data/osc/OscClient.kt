@@ -9,12 +9,13 @@ import android.util.Log
 
 /**
  * OSC client using raw Java sockets.
- * Single socket handles both send and receive on the same port.
+ * - Send from localPort (10025) to mixerPort (10024)
+ * - Receive on localPort (10025)
  */
 class OscClient(
     private val mixerIp: String,
-    private val mixerPort: Int = 10023,
-    private val localPort: Int = 10024
+    private val mixerPort: Int = 10024,
+    private val localPort: Int = 10025  // DIFFERENT from discovery port 10024!
 ) {
     private val TAG = "OscClient"
     private var socket: DatagramSocket? = null
@@ -34,7 +35,7 @@ class OscClient(
                     soTimeout = 1000
                     reuseAddress = true
                 }
-                Log.d(TAG, "Socket bound to port $localPort")
+                Log.d(TAG, "Socket bound to localPort=$localPort, will send to mixerPort=$mixerPort")
                 val buffer = ByteArray(4096)
                 var msgCount = 0
                 while (isActive && isRunning) {
@@ -44,7 +45,7 @@ class OscClient(
                         val len = pkt.length
                         val msg = OSCMessage(pkt.data, len)
                         msgCount++
-                        Log.d(TAG, "RECV[$msgCount] addr=${msg.address} args=${msg.args} from=${pkt.address}:${pkt.port}")
+                        Log.d(TAG, "RECV[$msgCount] addr=${msg.address} args=${msg.args}")
                         _收到的OSC訊息.emit(msg)
                     } catch (e: java.net.SocketTimeoutException) {
                         // Normal timeout - continue
@@ -53,7 +54,7 @@ class OscClient(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start socket: ${e.message}")
+                Log.e(TAG, "Failed to start socket on port $localPort: ${e.message}")
             }
         }
     }
@@ -64,7 +65,7 @@ class OscClient(
             val addr = InetAddress.getByName(mixerIp)
             val dp = DatagramPacket(packet, packet.size, addr, mixerPort)
             socket?.send(dp)
-            Log.d(TAG, "SEND addr=$address args=${args.map { it.toString() }.joinToString()}")
+            Log.d(TAG, "SEND to $mixerIp:$mixerPort addr=$address")
         } catch (e: Exception) {
             Log.e(TAG, "Send failed: ${e.message}")
         }
