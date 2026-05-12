@@ -3,12 +3,10 @@ package com.mixer.xr18.app;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.TextView;
-import android.widget.Toast;
+import android.view.View;
+import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
-
+import com.mixer.xr18.app.R;
 import com.mixer.xr18.lib.domain.model.MixerDevice;
 
 import java.util.List;
@@ -16,13 +14,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
-    
     private TextView tvStatus;
     private TextView tvResult;
     private EditText etIp;
     private Button btnConnectIp;
     private Button btnDiscover;
     private Button btnQuery;
+    private Button btnDebug;
     private MixerDevice connectedDevice;
     
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -44,8 +42,9 @@ public class MainActivity extends AppCompatActivity {
         btnConnectIp = findViewById(R.id.btn_connect_ip);
         btnDiscover = findViewById(R.id.btn_discover);
         btnQuery = findViewById(R.id.btn_query);
+        btnDebug = findViewById(R.id.btn_debug);
         
-        tvStatus.setText("XR18 Mixer V1.0014\nEnter IP or search broadcast");
+        tvStatus.setText("XR18 Mixer V1.0024\nEnter IP or search broadcast");
     }
     
     private void setupListeners() {
@@ -67,10 +66,10 @@ public class MainActivity extends AppCompatActivity {
                     
                     if (success) {
                         connectedDevice = DiscoveryHelper.createDevice(ip, "XR18", "XR18", "unknown");
-                        tvStatus.setText("Connected to " + ip + "!");
+                        tvStatus.setText("Connected to " + ip + "!\n" + DiscoveryHelper.getDebugMessages());
                         btnQuery.setEnabled(true);
                     } else {
-                        tvStatus.setText("Cannot reach " + ip + "\nCheck network connection");
+                        tvStatus.setText("Cannot reach " + ip + "\nCheck network connection\n" + DiscoveryHelper.getDebugMessages());
                     }
                 });
             });
@@ -88,12 +87,12 @@ public class MainActivity extends AppCompatActivity {
                     btnDiscover.setEnabled(true);
                     
                     if (devices.isEmpty()) {
-                        tvStatus.setText("No XR18 found - Demo Mode");
+                        tvStatus.setText("No XR18 found\n" + DiscoveryHelper.getDebugMessages());
                         showDemoData();
                     } else {
                         connectedDevice = devices.get(0);
                         etIp.setText(connectedDevice.getIpAddress());
-                        tvStatus.setText("Found: " + connectedDevice.getName() + "\nIP: " + connectedDevice.getIpAddress());
+                        tvStatus.setText("Found: " + connectedDevice.getName() + "\nIP: " + connectedDevice.getIpAddress() + "\n" + DiscoveryHelper.getDebugMessages());
                         btnQuery.setEnabled(true);
                     }
                 });
@@ -102,14 +101,15 @@ public class MainActivity extends AppCompatActivity {
         
         btnQuery.setOnClickListener(v -> {
             if (connectedDevice != null) {
-                tvStatus.setText("Querying channels...");
+                tvStatus.setText("Querying channels...\n" + DiscoveryHelper.getDebugMessages());
                 DiscoveryHelper.queryChannels(connectedDevice, result -> {
                     mainHandler.post(() -> {
+                        String debug = DiscoveryHelper.getDebugMessages();
                         if (result != null) {
                             tvResult.setText(result);
-                            tvStatus.setText("Channel data received!");
+                            tvStatus.setText("Channel data received!\n" + debug);
                         } else {
-                            tvResult.setText("No response from mixer\nShowing demo data");
+                            tvResult.setText("No response from mixer\nShowing demo data\n" + debug);
                             showDemoData();
                         }
                     });
@@ -117,6 +117,10 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 tvStatus.setText("No device connected");
             }
+        });
+        
+        btnDebug.setOnClickListener(v -> {
+            tvResult.setText(DiscoveryHelper.getDebugMessages());
         });
     }
     
@@ -141,8 +145,7 @@ public class MainActivity extends AppCompatActivity {
                       "║  CH15  Fader: 55% (-9.0dB)  Mute: ON  ║\n" +
                       "║  CH16  Fader: 80% (-1.0dB)  Mute: OFF ║\n" +
                       "╚══════════════════════════════════════╝\n\n" +
-                      "  AUX1  Fader: 70% (-3.2dB)\n" +
-                      "  AUX2  Fader: 65% (-5.5dB)";
+                      "** Demo Mode - No mixer connected **";
         tvResult.setText(demo);
         btnQuery.setEnabled(true);
     }

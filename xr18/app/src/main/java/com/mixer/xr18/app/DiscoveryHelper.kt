@@ -1,6 +1,8 @@
 package com.mixer.xr18.app
 
 import android.util.Log
+import com.mixer.xr18.lib.data.osc.OscClient
+import com.mixer.xr18.lib.data.osc.OSCMessage
 import com.mixer.xr18.lib.data.repository.XR18RepositoryImpl
 import com.mixer.xr18.lib.domain.model.MixerDevice
 import com.mixer.xr18.lib.domain.usecase.DiscoverMixersUseCase
@@ -16,6 +18,10 @@ import java.util.concurrent.CountDownLatch
 object DiscoveryHelper {
     private var viewModel: Xr18ViewModel? = null
     private val TAG = "XR18Discovery"
+    
+    // Store messages for display
+    val sentMessages = mutableListOf<String>()
+    val receivedMessages = mutableListOf<String>()
     
     @JvmStatic
     fun createDevice(ip: String, name: String, model: String, fw: String): MixerDevice {
@@ -36,6 +42,7 @@ object DiscoveryHelper {
                 val addr = InetAddress.getByName(ip)
                 val pkt = DatagramPacket(pingMsg, pingMsg.size, addr, 10023)
                 socket.send(pkt)
+                addSent("/xinfo")
                 
                 val buffer = ByteArray(4096)
                 val response = DatagramPacket(buffer, buffer.size)
@@ -43,14 +50,18 @@ object DiscoveryHelper {
                 try {
                     socket.receive(response)
                     result = true
+                    addReceived("/xinfo response from ${ip}")
                 } catch (e: java.net.SocketTimeoutException) {
                     val pkt2 = DatagramPacket(pingMsg, pingMsg.size, addr, 10024)
                     socket.send(pkt2)
+                    addSent("/xinfo to 10024")
                     try {
                         socket.receive(response)
                         result = true
+                        addReceived("/xinfo response from ${ip}:10024")
                     } catch (e2: java.net.SocketTimeoutException) {
                         result = false
+                        addReceived("No response from ${ip}")
                     }
                 }
                 
@@ -64,6 +75,18 @@ object DiscoveryHelper {
         
         latch.await()
         return result
+    }
+    
+    private fun addSent(msg: String) {
+        Log.d(TAG, "SEND: $msg")
+        sentMessages.add("[SEND] $msg")
+        if (sentMessages.size > 100) sentMessages.removeAt(0)
+    }
+    
+    private fun addReceived(msg: String) {
+        Log.d(TAG, "RECV: $msg")
+        receivedMessages.add("[RECV] $msg")
+        if (receivedMessages.size > 100) receivedMessages.removeAt(0)
     }
     
     private fun buildOscPing(): ByteArray {
@@ -81,6 +104,9 @@ object DiscoveryHelper {
     
     @JvmStatic
     fun discoverSync(): List<MixerDevice> {
+        sentMessages.clear()
+        receivedMessages.clear()
+        
         val latch = CountDownLatch(1)
         var result: List<MixerDevice> = emptyList()
         
@@ -94,6 +120,7 @@ object DiscoveryHelper {
                 val broadcastAddr = InetAddress.getByAddress(byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()))
                 val trigger = DatagramPacket(triggerData, triggerData.size, broadcastAddr, 10024)
                 socket.send(trigger)
+                addSent("broadcast to 10024")
                 
                 val buffer = ByteArray(2048)
                 val deadline = System.currentTimeMillis() + 3000
@@ -107,6 +134,8 @@ object DiscoveryHelper {
                         val srcIP = pkt.address.hostAddress
                         val addrEnd = findNullTerminator(buffer, 0, pkt.length)
                         val address = String(buffer, 0, addrEnd, Charsets.UTF_8)
+                        
+                        addReceived("from ${srcIP}: ${address}")
                         
                         if (address == "/xinfo") {
                             val typeTagOffset = (addrEnd + 4) and 0x7FFFFFFFC.toInt()
@@ -144,6 +173,9 @@ object DiscoveryHelper {
     
     @JvmStatic
     fun queryChannels(device: MixerDevice, callback: QueryCallback) {
+        sentMessages.clear()
+        receivedMessages.clear()
+        
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val repository = XR18RepositoryImpl(AppExecutors.scope)
@@ -157,7 +189,7 @@ object DiscoveryHelper {
                 )
                 viewModel?.連線至混音器(device)
                 
-                // Wait longer for all responses to arrive (XR18 has 16 channels + aux)
+                // Wait for all responses to arrive
                 delay(5000)
                 
                 val state = viewModel?.mixerState?.value
@@ -178,6 +210,16 @@ object DiscoveryHelper {
                 callback.onResult(null)
             }
         }
+    }
+    
+    @JvmStatic
+    fun getDebugMessages(): String {
+        val sb = StringBuilder()
+        sb.append("=== SENT ===\n")
+        sentMessages.takeLast(20).forEach { sb.append(it).append("\n") }
+        sb.append("\n=== RECEIVED ===\n")
+        receivedMessages.takeLast(20).forEach { sb.append(it).append("\n") }
+        return sb.toString()
     }
     
     private fun findNullTerminator(data: ByteArray, start: Int, end: Int): Int {
