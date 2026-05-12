@@ -7,13 +7,13 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 
 /**
- * Native OSC client using raw Java sockets.
- * No external dependencies.
+ * OSC client using raw Java sockets.
+ * Single socket handles both send and receive on the same port.
  */
 class OscClient(
     private val mixerIp: String,
     private val mixerPort: Int = 10023,
-    private val localPort: Int = 10025  // Use different port to avoid conflict with discovery
+    private val localPort: Int = 10024  // SAME port for send AND receive
 ) {
     private var socket: DatagramSocket? = null
     private var receiveJob: Job? = null
@@ -30,6 +30,7 @@ class OscClient(
             try {
                 socket = DatagramSocket(localPort).apply {
                     soTimeout = 1000
+                    reuseAddress = true
                 }
                 val buffer = ByteArray(4096)
                 while (isActive && isRunning) {
@@ -54,6 +55,7 @@ class OscClient(
         try {
             val packet = buildOscPacket(address, args.toList())
             val addr = InetAddress.getByName(mixerIp)
+            // Send using the SAME socket that's listening
             val dp = DatagramPacket(packet, packet.size, addr, mixerPort)
             socket?.send(dp)
         } catch (e: Exception) {
