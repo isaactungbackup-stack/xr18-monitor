@@ -128,37 +128,37 @@ data class OSCMessage(
         private fun parseArguments(data: ByteArray, length: Int): List<Any> {
             val args = mutableListOf<Any>()
             
-            // Find end of address
+            // Find end of address (null terminator)
             var pos = 0
             while (pos < length && data[pos] != 0.toByte()) pos++
+            // Align to 4-byte boundary
             pos = (pos + 4) and 0x7FFFFFFFC.toInt()
             
-            if (pos >= length || data[pos] != 0x2C.toByte()) return args // no type tag
+            // Check for type tag ","
+            if (pos >= length || data[pos] != 0x2C.toByte()) return args
             
-            pos++ // skip , 
-            pos = (pos + 3) and 0x7FFFFFFFC.toInt() // align
+            // Skip type tag and align to data
+            pos = (pos + 4) and 0x7FFFFFFFC.toInt()
             
             while (pos + 4 <= length) {
                 val typeTag = data[pos].toChar()
                 when (typeTag) {
                     'i' -> { // int32
-                        val v = ((data[pos+1].toInt() and 0xFF) shl 24) or
-                                ((data[pos+2].toInt() and 0xFF) shl 16) or
-                                ((data[pos+3].toInt() and 0xFF) shl 8) or
+                        val v = (data[pos+1].toInt() and 0xFF shl 24) or
+                                (data[pos+2].toInt() and 0xFF shl 16) or
+                                (data[pos+3].toInt() and 0xFF shl 8) or
                                 (data[pos+4].toInt() and 0xFF)
                         args.add(v)
-                        pos += 4
                     }
-                    'f' -> { // float32
-                        val bits = ((data[pos+1].toInt() and 0xFF) shl 24) or
-                                  ((data[pos+2].toInt() and 0xFF) shl 16) or
-                                  ((data[pos+3].toInt() and 0xFF) shl 8) or
+                    'f' -> { // float32 - big endian
+                        val bits = (data[pos+1].toInt() and 0xFF shl 24) or
+                                  (data[pos+2].toInt() and 0xFF shl 16) or
+                                  (data[pos+3].toInt() and 0xFF shl 8) or
                                   (data[pos+4].toInt() and 0xFF)
                         args.add(java.lang.Float.intBitsToFloat(bits))
-                        pos += 4
                     }
-                    'T' -> { args.add(true); pos += 4 }
-                    'F' -> { args.add(false); pos += 4 }
+                    'T' -> args.add(true)
+                    'F' -> args.add(false)
                     else -> break
                 }
                 pos = (pos + 4) and 0x7FFFFFFFC.toInt()
