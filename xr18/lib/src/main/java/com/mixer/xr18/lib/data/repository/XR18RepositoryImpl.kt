@@ -89,18 +89,23 @@ class XR18RepositoryImpl(
     override suspend fun queryChannelStates(device: MixerDevice) {
         停止所有連線()
         
-        // CRITICAL: Use port 10024 for commands, not 10023!
-        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024).also { it.啟動(scope) }
+        // Use IO dispatcher for network operations
+        val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        
+        // CRITICAL: Use port 10024 for commands, local port 10025
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024, localPort = 10025)
+        client?.啟動(ioScope)
+        Log.d(TAG, "OscClient started for ${device.ipAddress}:10024 -> local 10025")
 
         // Collect all incoming messages
-        scope.launch {
+        ioScope.launch {
             client?.收到的OSC訊息?.collect { msg ->
                 Log.d(TAG, "RECV: ${msg.address} args=${msg.args}")
                 更新頻道狀態(msg)
             }
         }
 
-        remoteJob = scope.launch(Dispatchers.IO) {
+        remoteJob = ioScope.launch {
             Log.d(TAG, "Starting query to ${device.ipAddress}:10024")
             
             // Send /xremote to trigger bulk data
@@ -121,6 +126,8 @@ class XR18RepositoryImpl(
                 delay(50)
             }
             
+            Log.d(TAG, "Query complete, waiting for responses...")
+            
             // Keep /xremote subscription alive
             while (isActive) {
                 delay(8000)
@@ -134,7 +141,10 @@ class XR18RepositoryImpl(
         if (_state.value.channels.isEmpty()) {
             val channels = (1..16).map { ChannelState(channelNumber = it) }
             _state.value = MixerState(device = device, channels = channels)
+            Log.d(TAG, "Initialized default channel states")
         }
+        
+        Log.d(TAG, "queryChannelStates completed")
     }
 
     private fun 更新頻道狀態(msg: OSCMessage) {
@@ -153,10 +163,12 @@ class XR18RepositoryImpl(
             addr.endsWith("/mix/fader") && msg.args.isNotEmpty() -> {
                 val v = (msg.args[0] as? Number)?.toFloat() ?: return
                 current[idx] = cs.copy(fader = v, faderDb = ChannelState.faderToDb(v))
+                Log.d(TAG, "CH$ch fader updated to $v")
             }
             addr.endsWith("/mix/on") && msg.args.isNotEmpty() -> {
                 val v = (msg.args[0] as? Number)?.toInt() ?: return
                 current[idx] = cs.copy(muted = v == 0)
+                Log.d(TAG, "CH$ch mute updated to ${v == 0}")
             }
             addr.endsWith("/mix/pan") && msg.args.isNotEmpty() -> {
                 val v = (msg.args[0] as? Number)?.toFloat() ?: return
