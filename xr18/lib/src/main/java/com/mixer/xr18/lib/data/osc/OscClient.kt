@@ -31,15 +31,16 @@ class OscClient(
 
         receiveJob = scope.launch(Dispatchers.IO) {
             try {
-                // CRITICAL: Bind to port 10024 so XR18 sends replies to 10024
-                // This matches the discovery port - XR18 replies to the source port of sender
-                // Using fixed port 10024 ensures XR18 sends back to a port we control
-                socket = DatagramSocket(10024)
+                // CRITICAL FIX: Bind to port 0 (ephemeral) instead of 10024
+                // XR18 replies to the SOURCE PORT of the incoming query
+                // With port 0, OS assigns an available port (e.g., 60002+)
+                // XR18 will reply to that ephemeral port - no conflict!
+                socket = DatagramSocket(0)
                 socket?.reuseAddress = true
                 socket?.soTimeout = 2000
                 
                 val localPort = socket?.localPort
-                Log.d(TAG, "Socket on port $localPort")
+                Log.d(TAG, "Socket bound to ephemeral port $localPort")
                 onMessage?.invoke("RECV", "Socket on port $localPort")
                 
                 val buffer = ByteArray(4096)

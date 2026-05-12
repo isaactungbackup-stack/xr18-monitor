@@ -92,16 +92,15 @@ class XR18RepositoryImpl(
         
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
-        // CRITICAL: Use port 10024 for ALL XR18 communication
-        // - Discovery sends to 10024 (broadcast)
-        // - Queries also go to 10024 (XR18 expects messages on same port)
-        // - Replies come back to port 10024 where we're listening
+        // XR18 OSC Port is 10024 (destination), but we use ephemeral port for sending
+        // XR18 replies to our source port (OS-assigned ephemeral port)
+        // This matches how X-air Edit works: ephemeral source port, fixed dest 10024
         client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024)
         
         client?.onMessage = { type, msg -> onMessage?.invoke(type, msg) }
         
-        // OscClient.傳送() uses its own socket (bound to 10024) to send
-        // XR18 receives on 10024 and replies to our source port (10024)
+        // OscClient now uses ephemeral port (0) - no port conflict!
+        // XR18 will reply to the OS-assigned source port
         client?.啟動(ioScope)
         Log.d(TAG, "OscClient started for ${device.ipAddress}:10024")
 
