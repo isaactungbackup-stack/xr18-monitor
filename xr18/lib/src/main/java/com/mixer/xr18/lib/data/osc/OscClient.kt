@@ -13,7 +13,7 @@ import java.net.InetAddress
 class OscClient(
     private val mixerIp: String,
     private val mixerPort: Int = 10023,
-    private val localPort: Int = 10024
+    private val localPort: Int = 10025  // Use different port to avoid conflict with discovery
 ) {
     private var socket: DatagramSocket? = null
     private var receiveJob: Job? = null
