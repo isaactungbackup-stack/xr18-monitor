@@ -116,24 +116,31 @@ class XR18RepositoryImpl(
         remoteJob = ioScope.launch {
             Log.d(TAG, "Starting query to ${device.ipAddress}:10024")
             
-            // First: Send /xremote to start subscription
+            // Step 1: First send /xinfo to verify connection works
+            client?.傳送("/xinfo")
+            Log.d(TAG, "SENT: /xinfo")
+            
+            // Wait 3 seconds for /xinfo response
+            delay(3000)
+            
+            // Step 2: Then try /xremote subscription
             client?.傳送("/xremote")
             Log.d(TAG, "SENT: /xremote")
             
-            delay(3000)
+            // Wait 5 seconds for any subscription data
+            delay(5000)
             
-            // Then: Send individual channel queries
+            // Step 3: Finally try individual channel queries
             for (ch in 1..16) {
                 val chStr = ch.toString().padStart(2, '0')
                 client?.傳送("/ch/$chStr/mix/fader")
                 Log.d(TAG, "SENT: /ch/$chStr/mix/fader")
                 delay(100)
-                client?.傳送("/ch/$chStr/mix/on")
-                delay(100)
             }
             
             Log.d(TAG, "Query complete")
             
+            // Keep sending /xremote every 8 seconds
             while (isActive) {
                 delay(8000)
                 client?.傳送("/xremote")
