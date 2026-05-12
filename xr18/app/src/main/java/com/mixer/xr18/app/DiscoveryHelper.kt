@@ -40,9 +40,9 @@ object DiscoveryHelper {
                 
                 val pingMsg = buildOscPing()
                 val addr = InetAddress.getByName(ip)
-                val pkt = DatagramPacket(pingMsg, pingMsg.size, addr, 10023)
+                val pkt = DatagramPacket(pingMsg, pingMsg.size, addr, 10024)
                 socket.send(pkt)
-                addSent("/xinfo")
+                addSent("/xinfo to 10024")
                 
                 val buffer = ByteArray(4096)
                 val response = DatagramPacket(buffer, buffer.size)
@@ -50,24 +50,25 @@ object DiscoveryHelper {
                 try {
                     socket.receive(response)
                     result = true
-                    addReceived("/xinfo response from ${ip}")
+                    addReceived("Got response from ${ip}")
                 } catch (e: java.net.SocketTimeoutException) {
-                    val pkt2 = DatagramPacket(pingMsg, pingMsg.size, addr, 10024)
+                    addReceived("Timeout from ${ip}:10024 - trying 10023")
+                    val pkt2 = DatagramPacket(pingMsg, pingMsg.size, addr, 10023)
                     socket.send(pkt2)
-                    addSent("/xinfo to 10024")
+                    addSent("/xinfo to 10023")
                     try {
                         socket.receive(response)
                         result = true
-                        addReceived("/xinfo response from ${ip}:10024")
+                        addReceived("Got response from ${ip}:10023")
                     } catch (e2: java.net.SocketTimeoutException) {
+                        addReceived("Timeout from ${ip}:10023")
                         result = false
-                        addReceived("No response from ${ip}")
                     }
                 }
                 
                 socket.close()
             } catch (e: Exception) {
-                Log.e(TAG, "Connection test failed: ${e.message}")
+                addReceived("Connect error: ${e.message}")
             } finally {
                 latch.countDown()
             }
@@ -96,8 +97,8 @@ object DiscoveryHelper {
         baos.write(addrBytes)
         baos.write(0)
         while (baos.size() % 4 != 0) baos.write(0)
-        baos.write(0) // , 
-        baos.write(0)
+        baos.write(0) // , (type tag marker)
+        baos.write(0) // padding
         while (baos.size() % 4 != 0) baos.write(0)
         return baos.toByteArray()
     }
@@ -194,6 +195,7 @@ object DiscoveryHelper {
                 
                 val state = viewModel?.mixerState?.value
                 Log.d(TAG, "queryChannels: got state with ${state?.channels?.size ?: 0} channels")
+                addSent("Query complete")
                 
                 if (state != null && state.channels.isNotEmpty()) {
                     val sb = StringBuilder()
@@ -206,7 +208,7 @@ object DiscoveryHelper {
                     callback.onResult(null)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Query failed: ${e.message}", e)
+                addReceived("Query error: ${e.message}")
                 callback.onResult(null)
             }
         }
