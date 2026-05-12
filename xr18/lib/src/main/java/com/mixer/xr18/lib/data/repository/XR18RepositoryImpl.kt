@@ -92,13 +92,13 @@ class XR18RepositoryImpl(
         
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
-        // Try port 10023 for commands (some XR18 configs use this)
-        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10023)
+        // Try port 10024 - since discovery worked with 10024
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024)
         
         client?.onMessage = { type, msg -> onMessage?.invoke(type, msg) }
         
         client?.啟動(ioScope)
-        Log.d(TAG, "OscClient started for ${device.ipAddress}:10023")
+        Log.d(TAG, "OscClient started for ${device.ipAddress}:10024")
 
         // Collect all incoming messages
         ioScope.launch {
@@ -109,15 +109,15 @@ class XR18RepositoryImpl(
         }
 
         remoteJob = ioScope.launch {
-            Log.d(TAG, "Starting query to ${device.ipAddress}:10023")
+            Log.d(TAG, "Starting query to ${device.ipAddress}:10024")
             
-            // Send /xremote to trigger bulk data
+            // First: Send /xremote to start subscription
             client?.傳送("/xremote")
             Log.d(TAG, "SENT: /xremote")
             
-            delay(2000)
+            delay(3000)
             
-            // Send individual channel queries
+            // Then: Send individual channel queries
             for (ch in 1..16) {
                 val chStr = ch.toString().padStart(2, '0')
                 client?.傳送("/ch/$chStr/mix/fader")
@@ -135,7 +135,7 @@ class XR18RepositoryImpl(
             }
         }
         
-        delay(5000)
+        delay(6000)
         if (_state.value.channels.isEmpty()) {
             val channels = (1..16).map { ChannelState(channelNumber = it) }
             _state.value = MixerState(device = device, channels = channels)
