@@ -1,16 +1,11 @@
 package com.mixer.xr18.lib.data.osc
 
-import android.util.Log
-import com.illposed.osc.OSCMessage
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
 
 /**
  * LAN discovery via UDP broadcast.
- * Sends a broadcast to port 10024 and collects /xinfo replies.
  */
 class Xr18DiscoveryClient(
     private val broadcastPort: Int = 10024,
@@ -25,11 +20,6 @@ class Xr18DiscoveryClient(
         val firmwareVersion: String
     )
 
-    /**
-     * Perform a single discovery sweep.
-     * @return list of discovered XR18 devices (may be empty)
-     */
-    @Suppress("BlockingMethodInNonBlockingContext")
     suspend fun discover(): List<DiscoveryResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val results = mutableListOf<DiscoveryResult>()
         try {
@@ -38,13 +28,10 @@ class Xr18DiscoveryClient(
                 broadcast = true
             }
 
-            // Send an empty broadcast to trigger /xinfo responses
-            // The XR18 sends /xinfo when any UDP packet is received on port 10024
-            val triggerData = ByteBuffer.wrap(ByteArray(1)).array()
+            val triggerData = ByteArray(1) { 0 }
             val trigger = DatagramPacket(
-                triggerData,
-                triggerData.size,
-                InetAddress.getByAddress(ByteArray(4) { 0xFF.toByte() }),
+                triggerData, triggerData.size,
+                InetAddress.getByAddress(byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte())),
                 broadcastPort
             )
             socket?.send(trigger)
@@ -63,7 +50,7 @@ class Xr18DiscoveryClient(
                 }
             }
         } catch (e: Exception) {
-            Log.e("XR18Discovery", "Discovery error: ${e.message}")
+            // Discovery failed
         } finally {
             socket?.close()
             socket = null
@@ -71,28 +58,40 @@ class Xr18DiscoveryClient(
         results
     }
 
-    private fun parseXInfoFromPacket(data: ByteArray, length: Int, sourceIp: String): DiscoveryResult? {
+    private fun parseXInfoFromPacket(data: ByteArray, length: Int, sourceIp: String?): DiscoveryResult? {
         try {
-            // Parse OSC bundle/message from raw bytes
-            val msg = OSCMessage(data)
-            val addr = msg.address ?: return null
-            if (addr != "/xinfo") return null
+            if (sourceIp == null) return null
+            val addrEnd = findNullTerminator(data, 0, length)
+            val address = String(data, 0, addrEnd, Charsets.UTF_8)
+            if (address != "/xinfo") return null
 
-            val args = msg.arguments
-            if (args.size < 3) return null
+            val typeTagOffset = (addrEnd + 4) and 0x7FFFFFFFC.toInt()
+            if (typeTagOffset >= length || data[typeTagOffset] != 0x2C.toByte()) return null
 
-            val name     = args.getOrNull(0)?.toString() ?: return null
-            val model    = args.getOrNull(1)?.toString() ?: return null
-            val firmware = args.getOrNull(2)?.toString() ?: return null
+            val strings = parseOSCStrings(data, typeTagOffset + 1, length)
+            if (strings.size < 3) return null
 
-            return DiscoveryResult(
-                ipAddress       = sourceIp ?: return null,
-                deviceName      = name,
-                model           = model,
-                firmwareVersion = firmware
-            )
+            return DiscoveryResult(sourceIp, strings[0], strings[1], strings[2])
         } catch (e: Exception) {
             return null
         }
+    }
+
+    private fun findNullTerminator(data: ByteArray, start: Int, end: Int): Int {
+        var i = start
+        while (i < end && data[i] != 0.toByte()) i++
+        return i.coerceAtMost(end)
+    }
+
+    private fun parseOSCStrings(data: ByteArray, start: Int, length: Int): List<String> {
+        val strings = mutableListOf<String>()
+        var pos = start
+        while (pos < length && data[pos] != 0.toByte()) {
+            val end = findNullTerminator(data, pos, length)
+            if (end <= pos) break
+            strings.add(String(data, pos, end - pos, Charsets.UTF_8))
+            pos = (end + 4) and 0x7FFFFFFFC.toInt()
+        }
+        return strings
     }
 }

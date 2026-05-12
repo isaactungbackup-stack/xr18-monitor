@@ -1,26 +1,22 @@
 package com.mixer.xr18.lib.presentation
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.mixer.xr18.lib.domain.model.MixerDevice
 import com.mixer.xr18.lib.domain.model.MixerState
 import com.mixer.xr18.lib.domain.usecase.DiscoverMixersUseCase
 import com.mixer.xr18.lib.domain.usecase.ObserveMixerStateUseCase
 import com.mixer.xr18.lib.domain.usecase.QueryChannelStatesUseCase
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 
+/**
+ * ViewModel replacement without Android lifecycle dependency.
+ */
 class Xr18ViewModel(
     private val discoverUseCase: DiscoverMixersUseCase,
     private val queryUseCase: QueryChannelStatesUseCase,
     private val observeUseCase: ObserveMixerStateUseCase
-) : ViewModel() {
-
-    private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
-
-    val mixerState: StateFlow<MixerState> = observeUseCase()
-        .stateIn(viewModelScope, SharingStarted.Lazily, MixerState())
+) {
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     sealed class UiState {
         data object Idle : UiState()
@@ -31,8 +27,14 @@ class Xr18ViewModel(
         data class Error(val message: String) : UiState()
     }
 
+    private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
+    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+
+    private val _mixerState = MutableStateFlow(MixerState())
+    val mixerState: StateFlow<MixerState> = _mixerState.asStateFlow()
+
     fun 開始探索() {
-        viewModelScope.launch {
+        scope.launch {
             _uiState.value = UiState.Discovering
             try {
                 val devices = discoverUseCase()
@@ -44,7 +46,7 @@ class Xr18ViewModel(
     }
 
     fun 連線至混音器(device: MixerDevice) {
-        viewModelScope.launch {
+        scope.launch {
             _uiState.value = UiState.QueryingChannels
             try {
                 queryUseCase(device)
@@ -53,5 +55,9 @@ class Xr18ViewModel(
                 _uiState.value = UiState.Error("連線失敗: ${e.message}")
             }
         }
+    }
+
+    fun cancel() {
+        scope.cancel()
     }
 }

@@ -1,11 +1,9 @@
 package com.mixer.xr18.lib.data.repository
 
-import android.util.Log
-import com.illposed.osc.OSCMessage
 import com.mixer.xr18.lib.data.osc.OscClient
-import com.mixer.xr18.lib.data.osc.XR18MessageParser
+import com.mixer.xr18.lib.data.osc.OSCMessage
+import com.mixer.xr18.lib.data.osc.Xr18DiscoveryClient
 import com.mixer.xr18.lib.domain.model.ChannelState
-import com.mixer.xr18.lib.domain.model.EqBands
 import com.mixer.xr18.lib.domain.model.MixerDevice
 import com.mixer.xr18.lib.domain.model.MixerState
 import com.mixer.xr18.lib.domain.repository.MixerRepository
@@ -14,9 +12,6 @@ import kotlinx.coroutines.flow.*
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.nio.ByteBuffer
-
-private const val TAG = "XR18Repository"
 
 class XR18RepositoryImpl(
     private val scope: CoroutineScope
@@ -29,7 +24,6 @@ class XR18RepositoryImpl(
     private var remoteJob: Job? = null
     private var queryJob: Job? = null
 
-    // ─── Discovery ───────────────────────────────────────────────
     override suspend fun discoverDevices(timeoutMs: Long): List<MixerDevice> =
         withContext(Dispatchers.IO) {
             val socket = DatagramSocket().apply { soTimeout = timeoutMs.toInt(); broadcast = true }
@@ -49,21 +43,23 @@ class XR18RepositoryImpl(
                 while (System.currentTimeMillis() < deadline) {
                     val pkt = DatagramPacket(buffer, buffer.size)
                     socket.receive(pkt)
-                    val msg = OSCMessage(pkt.data)
-                    val addr = msg.address ?: continue
+                    
+                    val addrEnd = findNullTerminator(buffer, 0, pkt.length)
+                    val addr = String(buffer, 0, addrEnd, Charsets.UTF_8)
                     if (addr != "/xinfo") continue
 
-                    val args = msg.arguments
-                    if (args.size < 3) continue
+                    val typeTagOffset = (addrEnd + 4) and 0x7FFFFFFFC.toInt()
+                    if (typeTagOffset >= pkt.length || buffer[typeTagOffset] != 0x2C.toByte()) continue
 
-                    results.add(
-                        MixerDevice(
-                            ipAddress        = pkt.address.hostAddress ?: continue,
-                            name             = args[0].toString(),
-                            model            = args[1].toString(),
-                            firmwareVersion  = args[2].toString()
-                        )
-                    )
+                    val strings = parseOSCStrings(buffer, typeTagOffset + 1, pkt.length)
+                    if (strings.size < 3) continue
+
+                    results.add(MixerDevice(
+                        ipAddress = pkt.address.hostAddress ?: continue,
+                        name = strings[0],
+                        model = strings[1],
+                        firmwareVersion = strings[2]
+                    ))
                 }
                 results
             } finally {
@@ -71,86 +67,80 @@ class XR18RepositoryImpl(
             }
         }
 
-    // ─── Connect & Query ──────────────────────────────────────────
+    private fun findNullTerminator(data: ByteArray, start: Int, end: Int): Int {
+        var i = start
+        while (i < end && data[i] != 0.toByte()) i++
+        return i.coerceAtMost(end)
+    }
+
+    private fun parseOSCStrings(data: ByteArray, start: Int, length: Int): List<String> {
+        val strings = mutableListOf<String>()
+        var pos = start
+        while (pos < length && data[pos] != 0.toByte()) {
+            val end = findNullTerminator(data, pos, length)
+            if (end <= pos) break
+            strings.add(String(data, pos, end - pos, Charsets.UTF_8))
+            pos = (end + 4) and 0x7FFFFFFFC.toInt()
+        }
+        return strings
+    }
+
     override suspend fun queryChannelStates(device: MixerDevice) {
-        // Cancel any prior session
         停止所有連線()
-
         _state.value = MixerState(device = device)
-
         client = OscClient(mixerIp = device.ipAddress).also { it.啟動(scope) }
 
-        // Listen for incoming messages and map them into state
         scope.launch {
             client?.收到的OSC訊息?.collect { msg ->
                 更新頻道狀態(msg)
             }
         }
 
-        // Send /xremote keep-alive every 8 seconds
         remoteJob = scope.launch {
             while (isActive) {
-                client?.傳送(com.mixer.xr18.lib.data.osc.XR18MessageFactory.buildXRemote())
+                client?.傳送("/xremote")
                 delay(8_000)
             }
         }
 
-        // Query all 16 channels once
         queryJob = scope.launch {
             for (ch in 1..16) {
-                XR18MessageFactory.buildChannelQuery(ch).forEach { q ->
-                    client?.傳送(q)
-                }
-                delay(30) // small stagger to avoid flooding
+                val chStr = ch.toString().padStart(2, '0')
+                client?.傳送("/ch/$chStr/mix/fader")
+                client?.傳送("/ch/$chStr/mix/on")
+                client?.傳送("/headamp/$ch/gain")
+                delay(30)
             }
         }
     }
 
-    // ─── State Update ─────────────────────────────────────────────
     private fun 更新頻道狀態(msg: OSCMessage) {
-        val addr = msg.address ?: return
-        val ch = XR18MessageParser.parseChannelNumber(addr) ?: return
+        val addr = msg.address
+        val chMatch = Regex("""/ch/(\d+)/""").find(addr) ?: return
+        val ch = chMatch.groupValues[1].toIntOrNull() ?: return
         if (ch < 1 || ch > 16) return
 
         val current = _state.value.channels.toMutableList()
         val idx = ch - 1
+        if (idx >= current.size) return
         val cs = current[idx]
 
         when {
-            addr.endsWith("/mix/fader") -> {
-                val v = XR18MessageParser.getFloat(msg) ?: return
-                current[idx] = cs.copy(
-                    fader = v,
-                    faderDb = ChannelState.faderToDb(v)
-                )
+            addr.endsWith("/mix/fader") && msg.args.isNotEmpty() -> {
+                val v = (msg.args[0] as? Number)?.toFloat() ?: return
+                current[idx] = cs.copy(fader = v, faderDb = ChannelState.faderToDb(v))
             }
-            addr.endsWith("/mix/on") -> {
-                val v = XR18MessageParser.getInt(msg) ?: return
+            addr.endsWith("/mix/on") && msg.args.isNotEmpty() -> {
+                val v = (msg.args[0] as? Number)?.toInt() ?: return
                 current[idx] = cs.copy(muted = v == 0)
             }
-            addr.endsWith("/mix/pan") -> {
-                val v = XR18MessageParser.getFloat(msg) ?: return
+            addr.endsWith("/mix/pan") && msg.args.isNotEmpty() -> {
+                val v = (msg.args[0] as? Number)?.toFloat() ?: return
                 current[idx] = cs.copy(pan = v)
             }
-            addr.startsWith("/headamp") -> {
-                val v = XR18MessageParser.getFloat(msg) ?: return
+            addr.startsWith("/headamp") && msg.args.isNotEmpty() -> {
+                val v = (msg.args[0] as? Number)?.toFloat() ?: return
                 current[idx] = cs.copy(preampGain = v)
-            }
-            addr.endsWith("/eq/on") -> {
-                val v = XR18MessageParser.getInt(msg) ?: return
-                current[idx] = cs.copy(eqEnabled = v == 1)
-            }
-            addr.endsWith("/g") -> {
-                val band = XR18MessageParser.parseEqBand(addr) ?: return
-                val v = XR18MessageParser.getFloat(msg) ?: return
-                val bands = when (band) {
-                    1 -> cs.eqBands.copy(band1 = v)
-                    2 -> cs.eqBands.copy(band2 = v)
-                    3 -> cs.eqBands.copy(band3 = v)
-                    4 -> cs.eqBands.copy(band4 = v)
-                    else -> cs.eqBands
-                }
-                current[idx] = cs.copy(eqBands = bands)
             }
         }
 
@@ -163,7 +153,4 @@ class XR18RepositoryImpl(
         client?.停止()
         client = null
     }
-
-    override fun equals(other: Any?) = other is XR18RepositoryImpl
-    override fun hashCode() = System.identityHashCode(this)
 }

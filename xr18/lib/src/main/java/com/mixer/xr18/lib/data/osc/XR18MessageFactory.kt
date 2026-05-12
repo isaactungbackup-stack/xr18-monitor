@@ -1,29 +1,27 @@
 package com.mixer.xr18.lib.data.osc
 
-import com.illposed.osc.OSCMessage
-import com.illposed.osc.messages.OSCRequest
-import com.illposed.osc.messages.OSCResponse
-
 /**
- * Thin wrappers around osc-java message builders.
+ * Factory for building XR18 OSC messages.
+ * No external dependencies.
  */
 object XR18MessageFactory {
 
-    fun buildXRemote(): OSCRequest {
-        return OSCRequest("/xremote")
-    }
+    fun buildXRemote(): String = "/xremote"
 
-    fun buildChannelQuery(channel: Int): List<OSCRequest> {
+    fun buildChannelQuery(channel: Int): List<String> {
+        val ch = channel.toString().padStart(2, '0')
         return listOf(
-            OSCRequest(XR18Addresses.chMixFader(channel)),
-            OSCRequest(XR18Addresses.chMixOn(channel)),
-            OSCRequest(XR18Addresses.chMixPan(channel)),
-            OSCRequest(XR18Addresses.headampGain(channel)),
-            OSCRequest(XR18Addresses.chEqOn(channel)),
-            OSCRequest(XR18Addresses.chEqBandG(channel, 1)),
-            OSCRequest(XR18Addresses.chEqBandG(channel, 2)),
-            OSCRequest(XR18Addresses.chEqBandG(channel, 3)),
-            OSCRequest(XR18Addresses.chEqBandG(channel, 4)),
+            "/ch/$ch/mix/fader",
+            "/ch/$ch/mix/on",
+            "/ch/$ch/mix/pan",
+            "/ch/$ch/eq/on",
+            "/ch/$ch/eq/1/g",
+            "/ch/$ch/eq/2/g",
+            "/ch/$ch/eq/3/g",
+            "/ch/$ch/eq/4/g",
+            "/headamp/$channel/gain"
         )
     }
+
+    fun buildSubscribeRequest(param: String): String = "/$param/subscribe"
 }
