@@ -9,12 +9,11 @@ import android.util.Log
 
 /**
  * OSC client using raw Java sockets.
- * Uses port 0 (ephemeral) - OS picks any available port.
- * This completely avoids port binding conflicts.
+ * Uses port 0 (ephemeral) to avoid binding conflicts.
  */
 class OscClient(
     private val mixerIp: String,
-    private val mixerPort: Int = 10023
+    private val mixerPort: Int = 10024
 ) {
     private val TAG = "OscClient"
     private var socket: DatagramSocket? = null
@@ -32,13 +31,12 @@ class OscClient(
 
         receiveJob = scope.launch(Dispatchers.IO) {
             try {
-                // Port 0 = ephemeral - OS picks any available port
                 socket = DatagramSocket(0)
                 socket?.reuseAddress = true
                 socket?.soTimeout = 1000
                 
                 val localPort = socket?.localPort
-                Log.d(TAG, "Socket bound to ephemeral port $localPort")
+                Log.d(TAG, "Socket on port $localPort")
                 onMessage?.invoke("RECV", "Socket on port $localPort")
                 
                 val buffer = ByteArray(4096)
@@ -48,9 +46,15 @@ class OscClient(
                         val pkt = DatagramPacket(buffer, buffer.size)
                         socket?.receive(pkt)
                         val len = pkt.length
+                        
+                        // Log raw bytes
+                        val hexStr = buffer.take(len).map { String.format("%02X", it) }.joinToString(" ")
+                        Log.d(TAG, "RAW[$len] $hexStr")
+                        onMessage?.invoke("RECV", "RAW[$len] $hexStr")
+                        
                         val msg = OSCMessage(pkt.data, len)
                         msgCount++
-                        val msgStr = "addr=${msg.address} from ${pkt.address.hostAddress}"
+                        val msgStr = "addr=${msg.address} args=${msg.args}"
                         Log.d(TAG, "RECV[$msgCount] $msgStr")
                         onMessage?.invoke("RECV", msgStr)
                         _收到的OSC訊息.emit(msg)
@@ -98,8 +102,8 @@ class OscClient(
         baos.write(0)
         while (baos.size() % 4 != 0) baos.write(0)
         
-        baos.write(0)
-        baos.write(44)
+        baos.write(0)  // type tag marker
+        baos.write(44) // ASCII ","
         baos.write(0); baos.write(0)
         
         for (arg in args) {
