@@ -93,7 +93,7 @@ class XR18RepositoryImpl(
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
         // Try port 10023 for commands (some XR18 configs use this)
-        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10023, localPort = 10026)
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10023)
         
         client?.onMessage = { type, msg -> onMessage?.invoke(type, msg) }
         
