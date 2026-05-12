@@ -32,7 +32,6 @@ object DiscoveryHelper {
                 val socket = DatagramSocket()
                 socket.soTimeout = 2000
                 
-                // Build OSC /xinfo message - same as V1.0014
                 val pingMsg = buildOscPing()
                 val addr = InetAddress.getByName(ip)
                 val pkt = DatagramPacket(pingMsg, pingMsg.size, addr, 10023)
@@ -158,12 +157,15 @@ object DiscoveryHelper {
                 )
                 viewModel?.連線至混音器(device)
                 
-                delay(2000)
+                // Wait longer for all responses to arrive (XR18 has 16 channels + aux)
+                delay(5000)
                 
                 val state = viewModel?.mixerState?.value
+                Log.d(TAG, "queryChannels: got state with ${state?.channels?.size ?: 0} channels")
+                
                 if (state != null && state.channels.isNotEmpty()) {
                     val sb = StringBuilder()
-                    state.channels.forEach { ch ->
+                    state.channels.take(16).forEach { ch ->
                         val db = if (ch.fader > 0.5f) "+%.1f dB".format((ch.fader - 0.5f) * 40) else "%.1f dB".format((ch.fader - 0.5f) * 40)
                         sb.append("CH%02d Fader: %.0f%% (%s) Mute: %s\n".format(ch.channelNumber, ch.fader * 100, db, if (ch.muted) "ON" else "OFF"))
                     }
@@ -172,6 +174,7 @@ object DiscoveryHelper {
                     callback.onResult(null)
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Query failed: ${e.message}", e)
                 callback.onResult(null)
             }
         }
