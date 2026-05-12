@@ -2,7 +2,6 @@ package com.mixer.xr18.lib.data.repository
 
 import com.mixer.xr18.lib.data.osc.OscClient
 import com.mixer.xr18.lib.data.osc.OSCMessage
-import com.mixer.xr18.lib.data.osc.Xr18DiscoveryClient
 import com.mixer.xr18.lib.domain.model.ChannelState
 import com.mixer.xr18.lib.domain.model.MixerDevice
 import com.mixer.xr18.lib.domain.model.MixerState
@@ -87,9 +86,16 @@ class XR18RepositoryImpl(
 
     override suspend fun queryChannelStates(device: MixerDevice) {
         停止所有連線()
-        _state.value = MixerState(device = device)
+        
+        // Initialize channels
+        val channels = (1..16).map { num ->
+            ChannelState(channelNumber = num)
+        }
+        _state.value = MixerState(device = device, channels = channels)
+        
         client = OscClient(mixerIp = device.ipAddress).also { it.啟動(scope) }
 
+        // Collect messages in background
         scope.launch {
             client?.收到的OSC訊息?.collect { msg ->
                 更新頻道狀態(msg)
@@ -97,25 +103,33 @@ class XR18RepositoryImpl(
         }
 
         remoteJob = scope.launch {
-            while (isActive) {
-                client?.傳送("/xremote")
-                delay(8_000)
-            }
-        }
-
-        queryJob = scope.launch {
+            // FIRST: Send /xremote to start subscription
+            client?.傳送("/xremote")
+            delay(2000) // Wait for bulk data response
+            
+            // THEN: Query individual parameters for remaining data
             for (ch in 1..16) {
                 val chStr = ch.toString().padStart(2, '0')
                 client?.傳送("/ch/$chStr/mix/fader")
+                delay(20)
                 client?.傳送("/ch/$chStr/mix/on")
+                delay(20)
                 client?.傳送("/headamp/$ch/gain")
                 delay(30)
+            }
+            
+            // Keep sending /xremote periodically
+            while (isActive) {
+                client?.傳送("/xremote")
+                delay(8_000)
             }
         }
     }
 
     private fun 更新頻道狀態(msg: OSCMessage) {
         val addr = msg.address
+        
+        // Handle /xremote bulk data format: /ch/xx/parameter value
         val chMatch = Regex("""/ch/(\d+)/""").find(addr) ?: return
         val ch = chMatch.groupValues[1].toIntOrNull() ?: return
         if (ch < 1 || ch > 16) return
@@ -131,6 +145,8 @@ class XR18RepositoryImpl(
                 current[idx] = cs.copy(fader = v, faderDb = ChannelState.faderToDb(v))
             }
             addr.endsWith("/mix/on") && msg.args.isNotEmpty() -> {
+                // XR18 returns: 0 = muted (on=true is muted? or is it inverted?)
+                // Actually /mix/on=0 means muted, /mix/on=1 means not muted
                 val v = (msg.args[0] as? Number)?.toInt() ?: return
                 current[idx] = cs.copy(muted = v == 0)
             }
@@ -138,7 +154,7 @@ class XR18RepositoryImpl(
                 val v = (msg.args[0] as? Number)?.toFloat() ?: return
                 current[idx] = cs.copy(pan = v)
             }
-            addr.startsWith("/headamp") && msg.args.isNotEmpty() -> {
+            addr.startsWith("/headamp") && addr.contains("/gain") && msg.args.isNotEmpty() -> {
                 val v = (msg.args[0] as? Number)?.toFloat() ?: return
                 current[idx] = cs.copy(preampGain = v)
             }
