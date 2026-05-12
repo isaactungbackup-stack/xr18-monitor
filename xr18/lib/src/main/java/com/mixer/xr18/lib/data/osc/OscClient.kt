@@ -31,9 +31,12 @@ class OscClient(
 
         receiveJob = scope.launch(Dispatchers.IO) {
             try {
-                socket = DatagramSocket(0)
+                // CRITICAL: Bind to port 10024 so XR18 sends replies to 10024
+                // This matches the discovery port - XR18 replies to the source port of sender
+                // Using fixed port 10024 ensures XR18 sends back to a port we control
+                socket = DatagramSocket(10024)
                 socket?.reuseAddress = true
-                socket?.soTimeout = 1000
+                socket?.soTimeout = 2000
                 
                 val localPort = socket?.localPort
                 Log.d(TAG, "Socket on port $localPort")

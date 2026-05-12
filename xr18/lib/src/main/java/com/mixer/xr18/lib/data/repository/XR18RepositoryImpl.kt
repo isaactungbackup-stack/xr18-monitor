@@ -92,11 +92,16 @@ class XR18RepositoryImpl(
         
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
-        // Try port 10024 - since discovery worked with 10024
+        // CRITICAL: Use port 10024 for ALL XR18 communication
+        // - Discovery sends to 10024 (broadcast)
+        // - Queries also go to 10024 (XR18 expects messages on same port)
+        // - Replies come back to port 10024 where we're listening
         client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024)
         
         client?.onMessage = { type, msg -> onMessage?.invoke(type, msg) }
         
+        // OscClient.傳送() uses its own socket (bound to 10024) to send
+        // XR18 receives on 10024 and replies to our source port (10024)
         client?.啟動(ioScope)
         Log.d(TAG, "OscClient started for ${device.ipAddress}:10024")
 
