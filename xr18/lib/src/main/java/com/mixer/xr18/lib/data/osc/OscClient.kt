@@ -9,12 +9,12 @@ import android.util.Log
 
 /**
  * OSC client using raw Java sockets.
- * Uses port 10025 for both send and receive (to avoid conflict with discovery on 10024).
+ * CRITICAL: Each instance uses its own port. Use port 10026 to avoid conflicts.
  */
 class OscClient(
     private val mixerIp: String,
     private val mixerPort: Int = 10024,
-    private val localPort: Int = 10025
+    private val localPort: Int = 10026  // Use 10026 to avoid conflicts
 ) {
     private val TAG = "OscClient"
     private var socket: DatagramSocket? = null
@@ -22,7 +22,7 @@ class OscClient(
     private var isRunning = false
 
     // Callback to report sent/received messages
-    var onMessage: ((String, String) -> Unit)? = null  // (type, message) type = "SEND" or "RECV"
+    var onMessage: ((String, String) -> Unit)? = null
     
     private val _收到的OSC訊息 = MutableSharedFlow<OSCMessage>(extraBufferCapacity = 64)
     val 收到的OSC訊息: SharedFlow<OSCMessage> = _收到的OSC訊息.asSharedFlow()
@@ -72,7 +72,7 @@ class OscClient(
             val addr = InetAddress.getByName(mixerIp)
             val dp = DatagramPacket(packet, packet.size, addr, mixerPort)
             socket?.send(dp)
-            val msgStr = "addr=$address to $mixerIp:$mixerPort"
+            val msgStr = "addr=$address"
             Log.d(TAG, "SEND $msgStr")
             onMessage?.invoke("SEND", msgStr)
         } catch (e: Exception) {

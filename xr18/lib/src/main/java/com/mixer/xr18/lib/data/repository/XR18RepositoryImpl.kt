@@ -94,7 +94,7 @@ class XR18RepositoryImpl(
         
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
-        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024, localPort = 10025)
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024, localPort = 10026)
         
         // Wire up the message callback
         client?.onMessage = { type, msg -> onMessage?.invoke(type, msg) }
