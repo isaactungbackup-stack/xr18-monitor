@@ -11,11 +11,13 @@ import kotlinx.coroutines.flow.*
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import android.util.Log
 
 class XR18RepositoryImpl(
     private val scope: CoroutineScope
 ) : MixerRepository {
 
+    private val TAG = "XR18Repo"
     private val _state = MutableStateFlow(MixerState())
     override fun mixerStateFlow(): StateFlow<MixerState> = _state.asStateFlow()
 
@@ -87,49 +89,57 @@ class XR18RepositoryImpl(
     override suspend fun queryChannelStates(device: MixerDevice) {
         停止所有連線()
         
-        // Initialize channels
-        val channels = (1..16).map { num ->
-            ChannelState(channelNumber = num)
-        }
-        _state.value = MixerState(device = device, channels = channels)
-        
-        client = OscClient(mixerIp = device.ipAddress).also { it.啟動(scope) }
+        // CRITICAL: Use port 10024 for commands, not 10023!
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024).also { it.啟動(scope) }
 
-        // Collect messages in background
+        // Collect all incoming messages
         scope.launch {
             client?.收到的OSC訊息?.collect { msg ->
+                Log.d(TAG, "RECV: ${msg.address} args=${msg.args}")
                 更新頻道狀態(msg)
             }
         }
 
-        remoteJob = scope.launch {
-            // FIRST: Send /xremote to start subscription
-            client?.傳送("/xremote")
-            delay(2000) // Wait for bulk data response
+        remoteJob = scope.launch(Dispatchers.IO) {
+            Log.d(TAG, "Starting query to ${device.ipAddress}:10024")
             
-            // THEN: Query individual parameters for remaining data
+            // Send /xremote to trigger bulk data
+            client?.傳送("/xremote")
+            Log.d(TAG, "SENT: /xremote")
+            
+            // Wait for XR18 to send bulk data
+            delay(3000)
+            
+            // Now send individual channel queries
             for (ch in 1..16) {
                 val chStr = ch.toString().padStart(2, '0')
                 client?.傳送("/ch/$chStr/mix/fader")
-                delay(20)
+                Log.d(TAG, "SENT: /ch/$chStr/mix/fader")
+                delay(50)
                 client?.傳送("/ch/$chStr/mix/on")
-                delay(20)
-                client?.傳送("/headamp/$ch/gain")
-                delay(30)
+                Log.d(TAG, "SENT: /ch/$chStr/mix/on")
+                delay(50)
             }
             
-            // Keep sending /xremote periodically
+            // Keep /xremote subscription alive
             while (isActive) {
+                delay(8000)
                 client?.傳送("/xremote")
-                delay(8_000)
+                Log.d(TAG, "SENT: /xremote (keepalive)")
             }
+        }
+        
+        // Initialize state after a delay
+        delay(6000)
+        if (_state.value.channels.isEmpty()) {
+            val channels = (1..16).map { ChannelState(channelNumber = it) }
+            _state.value = MixerState(device = device, channels = channels)
         }
     }
 
     private fun 更新頻道狀態(msg: OSCMessage) {
         val addr = msg.address
         
-        // Handle /xremote bulk data format: /ch/xx/parameter value
         val chMatch = Regex("""/ch/(\d+)/""").find(addr) ?: return
         val ch = chMatch.groupValues[1].toIntOrNull() ?: return
         if (ch < 1 || ch > 16) return
@@ -145,8 +155,6 @@ class XR18RepositoryImpl(
                 current[idx] = cs.copy(fader = v, faderDb = ChannelState.faderToDb(v))
             }
             addr.endsWith("/mix/on") && msg.args.isNotEmpty() -> {
-                // XR18 returns: 0 = muted (on=true is muted? or is it inverted?)
-                // Actually /mix/on=0 means muted, /mix/on=1 means not muted
                 val v = (msg.args[0] as? Number)?.toInt() ?: return
                 current[idx] = cs.copy(muted = v == 0)
             }
