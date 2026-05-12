@@ -144,16 +144,16 @@ data class OSCMessage(
                 val typeTag = data[pos].toChar()
                 when (typeTag) {
                     'i' -> { // int32
-                        val v = (data[pos+1].toInt() and 0xFF shl 24) or
-                                (data[pos+2].toInt() and 0xFF shl 16) or
-                                (data[pos+3].toInt() and 0xFF shl 8) or
+                        val v = ((data[pos+1].toInt() and 0xFF) shl 24) or
+                                ((data[pos+2].toInt() and 0xFF) shl 16) or
+                                ((data[pos+3].toInt() and 0xFF) shl 8) or
                                 (data[pos+4].toInt() and 0xFF)
                         args.add(v)
                     }
                     'f' -> { // float32 - big endian
-                        val bits = (data[pos+1].toInt() and 0xFF shl 24) or
-                                  (data[pos+2].toInt() and 0xFF shl 16) or
-                                  (data[pos+3].toInt() and 0xFF shl 8) or
+                        val bits = ((data[pos+1].toInt() and 0xFF) shl 24) or
+                                  ((data[pos+2].toInt() and 0xFF) shl 16) or
+                                  ((data[pos+3].toInt() and 0xFF) shl 8) or
                                   (data[pos+4].toInt() and 0xFF)
                         args.add(java.lang.Float.intBitsToFloat(bits))
                     }
