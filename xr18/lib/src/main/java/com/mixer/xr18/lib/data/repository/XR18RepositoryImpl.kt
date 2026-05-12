@@ -93,7 +93,7 @@ class XR18RepositoryImpl(
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
         // CRITICAL: Use port 10024 for commands, local port 10025
-        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024, localPort = 10025)
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024)
         client?.啟動(ioScope)
         Log.d(TAG, "OscClient started for ${device.ipAddress}:10024 -> local 10025")
 
