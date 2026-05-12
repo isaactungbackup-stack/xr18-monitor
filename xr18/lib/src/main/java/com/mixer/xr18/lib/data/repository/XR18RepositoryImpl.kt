@@ -24,8 +24,6 @@ class XR18RepositoryImpl(
     private var client: OscClient? = null
     private var remoteJob: Job? = null
     private var queryJob: Job? = null
-    
-    // Callback to report messages back to UI
     var onMessage: ((String, String) -> Unit)? = null
 
     override suspend fun discoverDevices(timeoutMs: Long): List<MixerDevice> =
@@ -94,13 +92,13 @@ class XR18RepositoryImpl(
         
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
-        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024, localPort = 10026)
+        // Try port 10023 for commands (some XR18 configs use this)
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10023, localPort = 10026)
         
-        // Wire up the message callback
         client?.onMessage = { type, msg -> onMessage?.invoke(type, msg) }
         
         client?.啟動(ioScope)
-        Log.d(TAG, "OscClient started for ${device.ipAddress}")
+        Log.d(TAG, "OscClient started for ${device.ipAddress}:10023")
 
         // Collect all incoming messages
         ioScope.launch {
@@ -111,37 +109,33 @@ class XR18RepositoryImpl(
         }
 
         remoteJob = ioScope.launch {
-            Log.d(TAG, "Starting query to ${device.ipAddress}")
+            Log.d(TAG, "Starting query to ${device.ipAddress}:10023")
             
             // Send /xremote to trigger bulk data
             client?.傳送("/xremote")
             Log.d(TAG, "SENT: /xremote")
             
-            // Wait for XR18 to send bulk data
-            delay(3000)
+            delay(2000)
             
-            // Now send individual channel queries
+            // Send individual channel queries
             for (ch in 1..16) {
                 val chStr = ch.toString().padStart(2, '0')
                 client?.傳送("/ch/$chStr/mix/fader")
                 Log.d(TAG, "SENT: /ch/$chStr/mix/fader")
-                delay(50)
+                delay(100)
                 client?.傳送("/ch/$chStr/mix/on")
-                Log.d(TAG, "SENT: /ch/$chStr/mix/on")
-                delay(50)
+                delay(100)
             }
             
-            Log.d(TAG, "Query complete, waiting for responses...")
+            Log.d(TAG, "Query complete")
             
-            // Keep /xremote subscription alive
             while (isActive) {
                 delay(8000)
                 client?.傳送("/xremote")
             }
         }
         
-        // Initialize state after a delay
-        delay(6000)
+        delay(5000)
         if (_state.value.channels.isEmpty()) {
             val channels = (1..16).map { ChannelState(channelNumber = it) }
             _state.value = MixerState(device = device, channels = channels)
