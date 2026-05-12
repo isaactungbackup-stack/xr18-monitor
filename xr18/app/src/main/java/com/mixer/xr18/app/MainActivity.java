@@ -4,7 +4,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.mixer.xr18.lib.domain.model.MixerDevice;
@@ -17,6 +19,8 @@ public class MainActivity extends AppCompatActivity {
     
     private TextView tvStatus;
     private TextView tvResult;
+    private EditText etIp;
+    private Button btnConnectIp;
     private Button btnDiscover;
     private Button btnQuery;
     private MixerDevice connectedDevice;
@@ -36,13 +40,42 @@ public class MainActivity extends AppCompatActivity {
     private void initViews() {
         tvStatus = findViewById(R.id.tv_status);
         tvResult = findViewById(R.id.tv_result);
+        etIp = findViewById(R.id.et_ip);
+        btnConnectIp = findViewById(R.id.btn_connect_ip);
         btnDiscover = findViewById(R.id.btn_discover);
         btnQuery = findViewById(R.id.btn_query);
         
-        tvStatus.setText("XR18 Mixer V1.0012\nTap Search to discover");
+        tvStatus.setText("XR18 Mixer V1.0014\nEnter IP or search broadcast");
     }
     
     private void setupListeners() {
+        btnConnectIp.setOnClickListener(v -> {
+            String ip = etIp.getText().toString().trim();
+            if (ip.isEmpty()) {
+                Toast.makeText(this, "Please enter IP address", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            tvStatus.setText("Connecting to " + ip + "...");
+            btnConnectIp.setEnabled(false);
+            
+            executor.execute(() -> {
+                boolean success = DiscoveryHelper.connectToIpSync(ip);
+                
+                mainHandler.post(() -> {
+                    btnConnectIp.setEnabled(true);
+                    
+                    if (success) {
+                        connectedDevice = DiscoveryHelper.createDevice(ip, "XR18", "XR18", "unknown");
+                        tvStatus.setText("Connected to " + ip + "!");
+                        btnQuery.setEnabled(true);
+                    } else {
+                        tvStatus.setText("Cannot reach " + ip + "\nCheck network connection");
+                    }
+                });
+            });
+        });
+        
         btnDiscover.setOnClickListener(v -> {
             tvStatus.setText("Searching for XR18...");
             btnDiscover.setEnabled(false);
@@ -59,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
                         showDemoData();
                     } else {
                         connectedDevice = devices.get(0);
+                        etIp.setText(connectedDevice.getIpAddress());
                         tvStatus.setText("Found: " + connectedDevice.getName() + "\nIP: " + connectedDevice.getIpAddress());
                         btnQuery.setEnabled(true);
                     }
@@ -68,9 +102,18 @@ public class MainActivity extends AppCompatActivity {
         
         btnQuery.setOnClickListener(v -> {
             if (connectedDevice != null) {
-                tvStatus.setText("Querying " + connectedDevice.getName() + "...");
-                DiscoveryHelper.connectToDevice(connectedDevice);
-                tvStatus.setText("Connected to " + connectedDevice.getName());
+                tvStatus.setText("Querying channels...");
+                DiscoveryHelper.queryChannels(connectedDevice, result -> {
+                    mainHandler.post(() -> {
+                        if (result != null) {
+                            tvResult.setText(result);
+                            tvStatus.setText("Channel data received!");
+                        } else {
+                            tvResult.setText("No response from mixer\nShowing demo data");
+                            showDemoData();
+                        }
+                    });
+                });
             } else {
                 tvStatus.setText("No device connected");
             }
