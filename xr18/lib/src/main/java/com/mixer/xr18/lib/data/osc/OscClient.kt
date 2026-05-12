@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.*
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import android.util.Log
 
 /**
  * OSC client using raw Java sockets.
@@ -13,8 +14,9 @@ import java.net.InetAddress
 class OscClient(
     private val mixerIp: String,
     private val mixerPort: Int = 10023,
-    private val localPort: Int = 10024  // SAME port for send AND receive
+    private val localPort: Int = 10024
 ) {
+    private val TAG = "OscClient"
     private var socket: DatagramSocket? = null
     private var receiveJob: Job? = null
     private var isRunning = false
@@ -32,21 +34,26 @@ class OscClient(
                     soTimeout = 1000
                     reuseAddress = true
                 }
+                Log.d(TAG, "Socket bound to port $localPort")
                 val buffer = ByteArray(4096)
+                var msgCount = 0
                 while (isActive && isRunning) {
                     try {
                         val pkt = DatagramPacket(buffer, buffer.size)
                         socket?.receive(pkt)
-                        val msg = OSCMessage(pkt.data, pkt.length)
+                        val len = pkt.length
+                        val msg = OSCMessage(pkt.data, len)
+                        msgCount++
+                        Log.d(TAG, "RECV[$msgCount] addr=${msg.address} args=${msg.args} from=${pkt.address}:${pkt.port}")
                         _收到的OSC訊息.emit(msg)
                     } catch (e: java.net.SocketTimeoutException) {
                         // Normal timeout - continue
                     } catch (e: Exception) {
-                        // Continue
+                        Log.e(TAG, "Recv error: ${e.message}")
                     }
                 }
             } catch (e: Exception) {
-                // Failed to start
+                Log.e(TAG, "Failed to start socket: ${e.message}")
             }
         }
     }
@@ -55,11 +62,11 @@ class OscClient(
         try {
             val packet = buildOscPacket(address, args.toList())
             val addr = InetAddress.getByName(mixerIp)
-            // Send using the SAME socket that's listening
             val dp = DatagramPacket(packet, packet.size, addr, mixerPort)
             socket?.send(dp)
+            Log.d(TAG, "SEND addr=$address args=${args.map { it.toString() }.joinToString()}")
         } catch (e: Exception) {
-            // Send failed
+            Log.e(TAG, "Send failed: ${e.message}")
         }
     }
 
@@ -130,29 +137,25 @@ data class OSCMessage(
         private fun parseArguments(data: ByteArray, length: Int): List<Any> {
             val args = mutableListOf<Any>()
             
-            // Find end of address (null terminator)
             var pos = 0
             while (pos < length && data[pos] != 0.toByte()) pos++
-            // Align to 4-byte boundary
             pos = (pos + 4) and 0x7FFFFFFFC.toInt()
             
-            // Check for type tag ","
             if (pos >= length || data[pos] != 0x2C.toByte()) return args
             
-            // Skip type tag and align to data
             pos = (pos + 4) and 0x7FFFFFFFC.toInt()
             
             while (pos + 4 <= length) {
                 val typeTag = data[pos].toChar()
                 when (typeTag) {
-                    'i' -> { // int32
+                    'i' -> {
                         val v = ((data[pos+1].toInt() and 0xFF) shl 24) or
                                 ((data[pos+2].toInt() and 0xFF) shl 16) or
                                 ((data[pos+3].toInt() and 0xFF) shl 8) or
                                 (data[pos+4].toInt() and 0xFF)
                         args.add(v)
                     }
-                    'f' -> { // float32 - big endian
+                    'f' -> {
                         val bits = ((data[pos+1].toInt() and 0xFF) shl 24) or
                                   ((data[pos+2].toInt() and 0xFF) shl 16) or
                                   ((data[pos+3].toInt() and 0xFF) shl 8) or
