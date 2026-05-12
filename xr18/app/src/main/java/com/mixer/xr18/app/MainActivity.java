@@ -3,11 +3,13 @@ package com.mixer.xr18.app;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.mixer.xr18.lib.domain.model.MixerDevice;
+
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -17,6 +19,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvResult;
     private Button btnDiscover;
     private Button btnQuery;
+    private MixerDevice connectedDevice;
     
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -36,33 +39,41 @@ public class MainActivity extends AppCompatActivity {
         btnDiscover = findViewById(R.id.btn_discover);
         btnQuery = findViewById(R.id.btn_query);
         
-        tvStatus.setText("XR18 Mixer V1.0011\nTap Search to discover");
+        tvStatus.setText("XR18 Mixer V1.0012\nTap Search to discover");
     }
     
     private void setupListeners() {
         btnDiscover.setOnClickListener(v -> {
             tvStatus.setText("Searching for XR18...");
             btnDiscover.setEnabled(false);
+            btnQuery.setEnabled(false);
             
             executor.execute(() -> {
-                try {
-                    Thread.sleep(1500);
-                    mainHandler.post(() -> {
-                        tvStatus.setText("Demo Mode - No XR18 found");
-                        btnDiscover.setEnabled(true);
+                List<MixerDevice> devices = DiscoveryHelper.discoverSync();
+                
+                mainHandler.post(() -> {
+                    btnDiscover.setEnabled(true);
+                    
+                    if (devices.isEmpty()) {
+                        tvStatus.setText("No XR18 found - Demo Mode");
                         showDemoData();
-                    });
-                } catch (Exception e) {
-                    mainHandler.post(() -> {
-                        tvStatus.setText("Error: " + e.getMessage());
-                        btnDiscover.setEnabled(true);
-                    });
-                }
+                    } else {
+                        connectedDevice = devices.get(0);
+                        tvStatus.setText("Found: " + connectedDevice.getName() + "\nIP: " + connectedDevice.getIpAddress());
+                        btnQuery.setEnabled(true);
+                    }
+                });
             });
         });
         
         btnQuery.setOnClickListener(v -> {
-            tvResult.setText("Query feature coming soon");
+            if (connectedDevice != null) {
+                tvStatus.setText("Querying " + connectedDevice.getName() + "...");
+                DiscoveryHelper.connectToDevice(connectedDevice);
+                tvStatus.setText("Connected to " + connectedDevice.getName());
+            } else {
+                tvStatus.setText("No device connected");
+            }
         });
     }
     
@@ -90,6 +101,7 @@ public class MainActivity extends AppCompatActivity {
                       "  AUX1  Fader: 70% (-3.2dB)\n" +
                       "  AUX2  Fader: 65% (-5.5dB)";
         tvResult.setText(demo);
+        btnQuery.setEnabled(true);
     }
     
     @Override
