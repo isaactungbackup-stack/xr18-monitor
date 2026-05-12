@@ -115,7 +115,7 @@ data class OSCMessage(
 ) {
     constructor(data: ByteArray, length: Int) : this(
         address = parseAddress(data, length),
-        args = emptyList()
+        args = parseArguments(data, length)
     )
 
     companion object {
@@ -123,6 +123,48 @@ data class OSCMessage(
             var end = 0
             while (end < length && data[end] != 0.toByte()) end++
             return String(data, 0, end, Charsets.UTF_8)
+        }
+        
+        private fun parseArguments(data: ByteArray, length: Int): List<Any> {
+            val args = mutableListOf<Any>()
+            
+            // Find end of address
+            var pos = 0
+            while (pos < length && data[pos] != 0.toByte()) pos++
+            pos = (pos + 4) and 0x7FFFFFFFC.toInt()
+            
+            if (pos >= length || data[pos] != 0x2C.toByte()) return args // no type tag
+            
+            pos++ // skip , 
+            pos = (pos + 3) and 0x7FFFFFFFC.toInt() // align
+            
+            while (pos + 4 <= length) {
+                val typeTag = data[pos].toChar()
+                when (typeTag) {
+                    'i' -> { // int32
+                        val v = ((data[pos+1].toInt() and 0xFF) shl 24) or
+                                ((data[pos+2].toInt() and 0xFF) shl 16) or
+                                ((data[pos+3].toInt() and 0xFF) shl 8) or
+                                (data[pos+4].toInt() and 0xFF)
+                        args.add(v)
+                        pos += 4
+                    }
+                    'f' -> { // float32
+                        val bits = ((data[pos+1].toInt() and 0xFF) shl 24) or
+                                  ((data[pos+2].toInt() and 0xFF) shl 16) or
+                                  ((data[pos+3].toInt() and 0xFF) shl 8) or
+                                  (data[pos+4].toInt() and 0xFF)
+                        args.add(java.lang.Float.intBitsToFloat(bits))
+                        pos += 4
+                    }
+                    'T' -> { args.add(true); pos += 4 }
+                    'F' -> { args.add(false); pos += 4 }
+                    else -> break
+                }
+                pos = (pos + 4) and 0x7FFFFFFFC.toInt()
+            }
+            
+            return args
         }
     }
 }
