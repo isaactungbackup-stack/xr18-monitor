@@ -97,8 +97,8 @@ object DiscoveryHelper {
         baos.write(addrBytes)
         baos.write(0)
         while (baos.size() % 4 != 0) baos.write(0)
-        baos.write(0) // , (type tag marker)
-        baos.write(0) // padding
+        baos.write(0)
+        baos.write(0)
         while (baos.size() % 4 != 0) baos.write(0)
         return baos.toByteArray()
     }
@@ -180,6 +180,12 @@ object DiscoveryHelper {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val repository = XR18RepositoryImpl(AppExecutors.scope)
+                
+                // Wire up the message callback to track OSC messages
+                repository.onMessage = { type, msg ->
+                    if (type == "SEND") addSent(msg) else addReceived(msg)
+                }
+                
                 val queryUseCase = QueryChannelStatesUseCase(repository)
                 val observeUseCase = ObserveMixerStateUseCase(repository)
                 

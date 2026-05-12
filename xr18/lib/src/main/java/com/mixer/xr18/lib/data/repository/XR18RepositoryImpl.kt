@@ -24,6 +24,9 @@ class XR18RepositoryImpl(
     private var client: OscClient? = null
     private var remoteJob: Job? = null
     private var queryJob: Job? = null
+    
+    // Callback to report messages back to UI
+    var onMessage: ((String, String) -> Unit)? = null
 
     override suspend fun discoverDevices(timeoutMs: Long): List<MixerDevice> =
         withContext(Dispatchers.IO) {
@@ -89,13 +92,15 @@ class XR18RepositoryImpl(
     override suspend fun queryChannelStates(device: MixerDevice) {
         停止所有連線()
         
-        // Use IO dispatcher for network operations
         val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
-        // CRITICAL: Use port 10024 for commands, local port 10025
-        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024)
+        client = OscClient(mixerIp = device.ipAddress, mixerPort = 10024, localPort = 10025)
+        
+        // Wire up the message callback
+        client?.onMessage = { type, msg -> onMessage?.invoke(type, msg) }
+        
         client?.啟動(ioScope)
-        Log.d(TAG, "OscClient started for ${device.ipAddress}:10024 -> local 10025")
+        Log.d(TAG, "OscClient started for ${device.ipAddress}")
 
         // Collect all incoming messages
         ioScope.launch {
@@ -106,7 +111,7 @@ class XR18RepositoryImpl(
         }
 
         remoteJob = ioScope.launch {
-            Log.d(TAG, "Starting query to ${device.ipAddress}:10024")
+            Log.d(TAG, "Starting query to ${device.ipAddress}")
             
             // Send /xremote to trigger bulk data
             client?.傳送("/xremote")
@@ -132,7 +137,6 @@ class XR18RepositoryImpl(
             while (isActive) {
                 delay(8000)
                 client?.傳送("/xremote")
-                Log.d(TAG, "SENT: /xremote (keepalive)")
             }
         }
         
@@ -141,10 +145,7 @@ class XR18RepositoryImpl(
         if (_state.value.channels.isEmpty()) {
             val channels = (1..16).map { ChannelState(channelNumber = it) }
             _state.value = MixerState(device = device, channels = channels)
-            Log.d(TAG, "Initialized default channel states")
         }
-        
-        Log.d(TAG, "queryChannelStates completed")
     }
 
     private fun 更新頻道狀態(msg: OSCMessage) {
@@ -163,12 +164,10 @@ class XR18RepositoryImpl(
             addr.endsWith("/mix/fader") && msg.args.isNotEmpty() -> {
                 val v = (msg.args[0] as? Number)?.toFloat() ?: return
                 current[idx] = cs.copy(fader = v, faderDb = ChannelState.faderToDb(v))
-                Log.d(TAG, "CH$ch fader updated to $v")
             }
             addr.endsWith("/mix/on") && msg.args.isNotEmpty() -> {
                 val v = (msg.args[0] as? Number)?.toInt() ?: return
                 current[idx] = cs.copy(muted = v == 0)
-                Log.d(TAG, "CH$ch mute updated to ${v == 0}")
             }
             addr.endsWith("/mix/pan") && msg.args.isNotEmpty() -> {
                 val v = (msg.args[0] as? Number)?.toFloat() ?: return

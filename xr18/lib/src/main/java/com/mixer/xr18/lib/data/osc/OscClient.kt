@@ -9,19 +9,21 @@ import android.util.Log
 
 /**
  * OSC client using raw Java sockets.
- * CRITICAL: Single socket bound to local port, used for BOTH send and receive.
- * This ensures XR18 sends responses back to our local port.
+ * Uses port 10025 for both send and receive (to avoid conflict with discovery on 10024).
  */
 class OscClient(
     private val mixerIp: String,
     private val mixerPort: Int = 10024,
-    private val localPort: Int = 10025  // DIFFERENT from discovery's 10024
+    private val localPort: Int = 10025
 ) {
     private val TAG = "OscClient"
     private var socket: DatagramSocket? = null
     private var receiveJob: Job? = null
     private var isRunning = false
 
+    // Callback to report sent/received messages
+    var onMessage: ((String, String) -> Unit)? = null  // (type, message) type = "SEND" or "RECV"
+    
     private val _收到的OSC訊息 = MutableSharedFlow<OSCMessage>(extraBufferCapacity = 64)
     val 收到的OSC訊息: SharedFlow<OSCMessage> = _收到的OSC訊息.asSharedFlow()
 
@@ -31,14 +33,12 @@ class OscClient(
 
         receiveJob = scope.launch(Dispatchers.IO) {
             try {
-                // Bind to local port BEFORE sending
-                // This ensures source port = local port for outgoing packets
                 socket = DatagramSocket(localPort).apply {
                     soTimeout = 1000
                     reuseAddress = true
                 }
                 Log.d(TAG, "Socket bound to localPort=$localPort")
-                Log.d(TAG, "Will send to mixer at $mixerIp:$mixerPort")
+                onMessage?.invoke("RECV", "Socket bound to port $localPort")
                 
                 val buffer = ByteArray(4096)
                 var msgCount = 0
@@ -49,7 +49,9 @@ class OscClient(
                         val len = pkt.length
                         val msg = OSCMessage(pkt.data, len)
                         msgCount++
-                        Log.d(TAG, "RECV[$msgCount] addr=${msg.address} args=${msg.args}")
+                        val msgStr = "addr=${msg.address} args=${msg.args}"
+                        Log.d(TAG, "RECV[$msgCount] $msgStr")
+                        onMessage?.invoke("RECV", msgStr)
                         _收到的OSC訊息.emit(msg)
                     } catch (e: java.net.SocketTimeoutException) {
                         // Normal timeout - continue
@@ -59,6 +61,7 @@ class OscClient(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start socket on port $localPort: ${e.message}")
+                onMessage?.invoke("RECV", "Socket error: ${e.message}")
             }
         }
     }
@@ -69,9 +72,12 @@ class OscClient(
             val addr = InetAddress.getByName(mixerIp)
             val dp = DatagramPacket(packet, packet.size, addr, mixerPort)
             socket?.send(dp)
-            Log.d(TAG, "SEND to $mixerIp:$mixerPort addr=$address")
+            val msgStr = "addr=$address to $mixerIp:$mixerPort"
+            Log.d(TAG, "SEND $msgStr")
+            onMessage?.invoke("SEND", msgStr)
         } catch (e: Exception) {
             Log.e(TAG, "Send failed: ${e.message}")
+            onMessage?.invoke("SEND", "FAILED: ${e.message}")
         }
     }
 
@@ -91,8 +97,8 @@ class OscClient(
         baos.write(0)
         while (baos.size() % 4 != 0) baos.write(0)
         
-        baos.write(0)  // type tag start
-        baos.write(44) // ASCII for ","
+        baos.write(0)
+        baos.write(44)
         baos.write(0); baos.write(0)
         
         for (arg in args) {
