@@ -9,19 +9,18 @@ import android.util.Log
 
 /**
  * OSC client using raw Java sockets.
- * CRITICAL: Each instance uses its own port. Use port 10026 to avoid conflicts.
+ * Uses port 10026 with SO_REUSEADDR enabled.
  */
 class OscClient(
     private val mixerIp: String,
     private val mixerPort: Int = 10024,
-    private val localPort: Int = 10026  // Use 10026 to avoid conflicts
+    private val localPort: Int = 10026
 ) {
     private val TAG = "OscClient"
     private var socket: DatagramSocket? = null
     private var receiveJob: Job? = null
     private var isRunning = false
 
-    // Callback to report sent/received messages
     var onMessage: ((String, String) -> Unit)? = null
     
     private val _收到的OSC訊息 = MutableSharedFlow<OSCMessage>(extraBufferCapacity = 64)
@@ -33,10 +32,12 @@ class OscClient(
 
         receiveJob = scope.launch(Dispatchers.IO) {
             try {
-                socket = DatagramSocket(localPort).apply {
-                    soTimeout = 1000
-                    reuseAddress = true
-                }
+                // Create socket and set SO_REUSEADDR BEFORE bind
+                socket = DatagramSocket()
+                socket?.reuseAddress = true
+                socket?.bind(java.net.InetSocketAddress(localPort))
+                socket?.soTimeout = 1000
+                
                 Log.d(TAG, "Socket bound to localPort=$localPort")
                 onMessage?.invoke("RECV", "Socket bound to port $localPort")
                 
