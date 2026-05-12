@@ -79,12 +79,19 @@ class OscClient(
             val packet = buildOscPacket(address, args.toList())
             val addr = InetAddress.getByName(mixerIp)
             val dp = DatagramPacket(packet, packet.size, addr, mixerPort)
+            
+            // Log the packet we're about to send
+            val hexSend = packet.map { String.format("%02X", it) }.joinToString("")
+            Log.d(TAG, "SEND[$address] len=${packet.size} hex=$hexSend")
+            onMessage?.invoke("SEND", "[$address] len=${packet.size} hex=$hexSend")
+            
             socket?.send(dp)
+            
             val msgStr = "addr=$address to $mixerIp:$mixerPort"
-            Log.d(TAG, "SEND $msgStr")
-            onMessage?.invoke("SEND", msgStr)
+            Log.d(TAG, "SEND OK: $msgStr")
+            onMessage?.invoke("SEND", "OK: $msgStr")
         } catch (e: Exception) {
-            Log.e(TAG, "Send failed: ${e.message}")
+            Log.e(TAG, "Send FAILED: ${e.message}")
             onMessage?.invoke("SEND", "FAILED: ${e.message}")
         }
     }

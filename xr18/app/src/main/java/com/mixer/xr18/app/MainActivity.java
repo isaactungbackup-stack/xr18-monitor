@@ -16,11 +16,13 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
     private TextView tvStatus;
     private TextView tvResult;
+    private TextView tvOscLog;
     private EditText etIp;
     private Button btnConnectIp;
     private Button btnDiscover;
     private Button btnQuery;
     private Button btnDebug;
+    private Button btnClearLog;
     private MixerDevice connectedDevice;
     
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -38,11 +40,13 @@ public class MainActivity extends AppCompatActivity {
     private void initViews() {
         tvStatus = findViewById(R.id.tv_status);
         tvResult = findViewById(R.id.tv_result);
+        tvOscLog = findViewById(R.id.tv_osc_log);
         etIp = findViewById(R.id.et_ip);
         btnConnectIp = findViewById(R.id.btn_connect_ip);
         btnDiscover = findViewById(R.id.btn_discover);
         btnQuery = findViewById(R.id.btn_query);
         btnDebug = findViewById(R.id.btn_debug);
+        btnClearLog = findViewById(R.id.btn_clear_log);
         
         tvStatus.setText("XR18 Mixer V1.0024\nEnter IP or search broadcast");
     }
@@ -102,6 +106,27 @@ public class MainActivity extends AppCompatActivity {
         btnQuery.setOnClickListener(v -> {
             if (connectedDevice != null) {
                 tvStatus.setText("Querying channels...\n" + DiscoveryHelper.getDebugMessages());
+                
+                // Clear previous log and set up real-time log display
+                final StringBuilder oscLog = new StringBuilder();
+                DiscoveryHelper.onLogUpdate = msg -> {
+                    mainHandler.post(() -> {
+                        oscLog.append(msg).append("\n");
+                        String logText = oscLog.toString();
+                        // Keep only last 100 lines
+                        String[] lines = logText.split("\n");
+                        if (lines.length > 100) {
+                            StringBuilder trimmed = new StringBuilder();
+                            for (int i = lines.length - 100; i < lines.length; i++) {
+                                trimmed.append(lines[i]).append("\n");
+                            }
+                            tvOscLog.setText(trimmed.toString());
+                        } else {
+                            tvOscLog.setText(logText);
+                        }
+                    });
+                };
+                
                 DiscoveryHelper.queryChannels(connectedDevice, result -> {
                     mainHandler.post(() -> {
                         String debug = DiscoveryHelper.getDebugMessages();
@@ -121,6 +146,10 @@ public class MainActivity extends AppCompatActivity {
         
         btnDebug.setOnClickListener(v -> {
             tvResult.setText(DiscoveryHelper.getDebugMessages());
+        });
+        
+        btnClearLog.setOnClickListener(v -> {
+            tvOscLog.setText("(cleared)");
         });
     }
     

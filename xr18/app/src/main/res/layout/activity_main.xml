@@ -64,6 +64,34 @@
             android:text="Show Debug Log"
             android:layout_marginTop="8dp" />
 
+        <Button
+            android:id="@+id/btn_clear_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Clear Log"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="=== OSC Log ==="
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/tv_osc_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="(empty)"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:padding="8dp"
+            android:background="#1a1a1a"
+            android:textColor="#00FF00"
+            android:layout_marginTop="4dp"
+            android:maxHeight="300dp" />
+
         <TextView
             android:id="@+id/tv_result"
             android:layout_width="match_parent"

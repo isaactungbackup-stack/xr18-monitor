@@ -15,6 +15,8 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.util.concurrent.CountDownLatch
 
+import java.util.function.Consumer
+
 object DiscoveryHelper {
     private var viewModel: Xr18ViewModel? = null
     private val TAG = "XR18Discovery"
@@ -22,6 +24,9 @@ object DiscoveryHelper {
     // Store messages for display
     val sentMessages = mutableListOf<String>()
     val receivedMessages = mutableListOf<String>()
+    
+    // Real-time log callback - use Consumer so Java can set it easily
+    @JvmField var onLogUpdate: Consumer<String>? = null
     
     @JvmStatic
     fun createDevice(ip: String, name: String, model: String, fw: String): MixerDevice {
@@ -82,12 +87,14 @@ object DiscoveryHelper {
         Log.d(TAG, "SEND: $msg")
         sentMessages.add("[SEND] $msg")
         if (sentMessages.size > 100) sentMessages.removeAt(0)
+        onLogUpdate?.accept("[SEND] $msg")
     }
     
     private fun addReceived(msg: String) {
         Log.d(TAG, "RECV: $msg")
         receivedMessages.add("[RECV] $msg")
         if (receivedMessages.size > 100) receivedMessages.removeAt(0)
+        onLogUpdate?.accept("[RECV] $msg")
     }
     
     private fun buildOscPing(): ByteArray {
