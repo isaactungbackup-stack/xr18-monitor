@@ -50,10 +50,15 @@ class OscClient(
                         socket?.receive(pkt)
                         val len = pkt.length
                         
-                        // Log raw bytes
+                        // Log raw bytes with ASCII interpretation
                         val hexStr = buffer.take(len).map { String.format("%02X", it) }.joinToString(" ")
-                        Log.d(TAG, "RAW[$len] $hexStr")
-                        onMessage?.invoke("RECV", "RAW[$len] $hexStr")
+                        val asciiStr = buffer.take(len).map { 
+                            if (it in 0x20..0x7E) it.toChar() else '.' 
+                        }.joinToString("")
+                        Log.d(TAG, "RAW[$len] hex=$hexStr")
+                        Log.d(TAG, "RAW[$len] ascii=$asciiStr")
+                        onMessage?.invoke("RECV", "RAW[$len]")
+                        onMessage?.invoke("RECV", "  hex=$hexStr")
                         
                         val msg = OSCMessage(pkt.data, len)
                         msgCount++
@@ -80,16 +85,21 @@ class OscClient(
             val addr = InetAddress.getByName(mixerIp)
             val dp = DatagramPacket(packet, packet.size, addr, mixerPort)
             
-            // Log the packet we're about to send
-            val hexSend = packet.map { String.format("%02X", it) }.joinToString("")
-            Log.d(TAG, "SEND[$address] len=${packet.size} hex=$hexSend")
-            onMessage?.invoke("SEND", "[$address] len=${packet.size} hex=$hexSend")
+            // Log the packet with ASCII interpretation
+            val hexSend = packet.map { String.format("%02X", it) }.joinToString(" ")
+            val asciiStr = packet.map { 
+                if (it in 0x20..0x7E) it.toChar() else '.' 
+            }.joinToString("")
+            Log.d(TAG, "SEND[$address] len=${packet.size}")
+            Log.d(TAG, "  hex= $hexSend")
+            Log.d(TAG, "  ascii=$asciiStr")
+            onMessage?.invoke("SEND", "[$address] len=${packet.size}")
+            onMessage?.invoke("SEND", "  hex= $hexSend")
             
             socket?.send(dp)
             
-            val msgStr = "addr=$address to $mixerIp:$mixerPort"
-            Log.d(TAG, "SEND OK: $msgStr")
-            onMessage?.invoke("SEND", "OK: $msgStr")
+            Log.d(TAG, "SEND OK to $mixerIp:$mixerPort")
+            onMessage?.invoke("SEND", "OK: to $mixerIp:$mixerPort")
         } catch (e: Exception) {
             Log.e(TAG, "Send FAILED: ${e.message}")
             onMessage?.invoke("SEND", "FAILED: ${e.message}")
@@ -107,15 +117,25 @@ class OscClient(
 
     private fun buildOscPacket(address: String, args: List<Any>): ByteArray {
         val baos = java.io.ByteArrayOutputStream()
+        
+        // Write address
         val addrBytes = address.toByteArray()
         baos.write(addrBytes)
-        baos.write(0)
-        while (baos.size() % 4 != 0) baos.write(0)
+        baos.write(0)  // null terminator
+        while (baos.size() % 4 != 0) baos.write(0)  // pad to 4-byte boundary
         
-        baos.write(0)  // type tag marker
+        // Write type tag (starts with comma)
         baos.write(44) // ASCII ","
-        baos.write(0); baos.write(0)
+        for (arg in args) {
+            when (arg) {
+                is Int -> baos.write(105) // 'i'
+                is Float -> baos.write(102) // 'f'
+                is String -> baos.write(115) // 's'
+            }
+        }
+        while (baos.size() % 4 != 0) baos.write(0)  // pad type tag to 4-byte boundary
         
+        // Write arguments
         for (arg in args) {
             when (arg) {
                 is Int -> {
