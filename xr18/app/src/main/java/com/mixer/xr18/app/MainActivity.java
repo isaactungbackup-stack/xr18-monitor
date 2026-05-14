@@ -1,12 +1,15 @@
 package com.mixer.xr18.app;
 
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import com.mixer.xr18.app.R;
+import com.mixer.xr18.lib.domain.model.ChannelState;
 import com.mixer.xr18.lib.domain.model.MixerDevice;
 
 import java.util.List;
@@ -15,7 +18,6 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private TextView tvStatus;
-    private TextView tvResult;
     private TextView tvOscLog;
     private EditText etIp;
     private Button btnConnectIp;
@@ -23,23 +25,31 @@ public class MainActivity extends AppCompatActivity {
     private Button btnQuery;
     private Button btnDebug;
     private Button btnClearLog;
+    private LinearLayout channelsContainer;
     private MixerDevice connectedDevice;
-    
+
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    
+
+    // Cached channel states for UI update
+    private final ChannelState[] channelStates = new ChannelState[16];
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        
+
         initViews();
         setupListeners();
+
+        // Pre-init channel states with defaults
+        for (int i = 0; i < 16; i++) {
+            channelStates[i] = new ChannelState(i + 1);
+        }
     }
-    
+
     private void initViews() {
         tvStatus = findViewById(R.id.tv_status);
-        tvResult = findViewById(R.id.tv_result);
         tvOscLog = findViewById(R.id.tv_osc_log);
         etIp = findViewById(R.id.et_ip);
         btnConnectIp = findViewById(R.id.btn_connect_ip);
@@ -47,10 +57,11 @@ public class MainActivity extends AppCompatActivity {
         btnQuery = findViewById(R.id.btn_query);
         btnDebug = findViewById(R.id.btn_debug);
         btnClearLog = findViewById(R.id.btn_clear_log);
-        
-        tvStatus.setText("XR18 Mixer V1.0024\nEnter IP or search broadcast");
+        channelsContainer = findViewById(R.id.channels_container);
+
+        tvStatus.setText("XR18 Mixer V1.0060\nEnter IP or search broadcast");
     }
-    
+
     private void setupListeners() {
         btnConnectIp.setOnClickListener(v -> {
             String ip = etIp.getText().toString().trim();
@@ -58,16 +69,16 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Please enter IP address", Toast.LENGTH_SHORT).show();
                 return;
             }
-            
+
             tvStatus.setText("Connecting to " + ip + "...");
             btnConnectIp.setEnabled(false);
-            
+
             executor.execute(() -> {
                 boolean success = DiscoveryHelper.connectToIpSync(ip);
-                
+
                 mainHandler.post(() -> {
                     btnConnectIp.setEnabled(true);
-                    
+
                     if (success) {
                         connectedDevice = DiscoveryHelper.createDevice(ip, "XR18", "XR18", "unknown");
                         tvStatus.setText("Connected to " + ip + "!\n" + DiscoveryHelper.getDebugMessages());
@@ -78,18 +89,18 @@ public class MainActivity extends AppCompatActivity {
                 });
             });
         });
-        
+
         btnDiscover.setOnClickListener(v -> {
             tvStatus.setText("Searching for XR18...");
             btnDiscover.setEnabled(false);
             btnQuery.setEnabled(false);
-            
+
             executor.execute(() -> {
                 List<MixerDevice> devices = DiscoveryHelper.discoverSync();
-                
+
                 mainHandler.post(() -> {
                     btnDiscover.setEnabled(true);
-                    
+
                     if (devices.isEmpty()) {
                         tvStatus.setText("No XR18 found\n" + DiscoveryHelper.getDebugMessages());
                         showDemoData();
@@ -102,22 +113,27 @@ public class MainActivity extends AppCompatActivity {
                 });
             });
         });
-        
+
         btnQuery.setOnClickListener(v -> {
             if (connectedDevice != null) {
                 tvStatus.setText("Querying channels...\n" + DiscoveryHelper.getDebugMessages());
-                
-                // Clear previous log and set up real-time log display
-                final StringBuilder oscLog = new StringBuilder();
-                DiscoveryHelper.onLogUpdate = msg -> {
+
+                // Clear previous log
+                final StringBuilder oscLog = new StringBuilder(8192);
+                channelsContainer.removeAllViews();
+                channelsContainer.setVisibility(View.VISIBLE);
+
+                // Build channel rows immediately (with default values)
+                buildChannelRows();
+
+                DiscoveryHelper.setLogConsumer(msg -> {
                     mainHandler.post(() -> {
                         oscLog.append(msg).append("\n");
                         String logText = oscLog.toString();
-                        // Keep only last 100 lines
                         String[] lines = logText.split("\n");
-                        if (lines.length > 100) {
+                        if (lines.length > 500) {
                             StringBuilder trimmed = new StringBuilder();
-                            for (int i = lines.length - 100; i < lines.length; i++) {
+                            for (int i = lines.length - 500; i < lines.length; i++) {
                                 trimmed.append(lines[i]).append("\n");
                             }
                             tvOscLog.setText(trimmed.toString());
@@ -125,17 +141,16 @@ public class MainActivity extends AppCompatActivity {
                             tvOscLog.setText(logText);
                         }
                     });
-                };
-                
+                });
+
                 DiscoveryHelper.queryChannels(connectedDevice, result -> {
                     mainHandler.post(() -> {
                         String debug = DiscoveryHelper.getDebugMessages();
-                        if (result != null) {
-                            tvResult.setText(result);
+                        if (result != null && result.length > 0) {
+                            updateChannelRows(result);
                             tvStatus.setText("Channel data received!\n" + debug);
                         } else {
-                            tvResult.setText("No response from mixer\nShowing demo data\n" + debug);
-                            showDemoData();
+                            tvStatus.setText("No response from mixer\n" + debug);
                         }
                     });
                 });
@@ -143,42 +158,103 @@ public class MainActivity extends AppCompatActivity {
                 tvStatus.setText("No device connected");
             }
         });
-        
+
         btnDebug.setOnClickListener(v -> {
-            tvResult.setText(DiscoveryHelper.getDebugMessages());
+            tvOscLog.setText(DiscoveryHelper.getDebugMessages());
         });
-        
+
         btnClearLog.setOnClickListener(v -> {
             tvOscLog.setText("(cleared)");
         });
     }
-    
-    private void showDemoData() {
-        String demo = "╔══════════════════════════════════════╗\n" +
-                      "║       XR18 Demo Mode                ║\n" +
-                      "╠══════════════════════════════════════╣\n" +
-                      "║  CH01  Fader: 65% (-6.2dB)  Mute: OFF ║\n" +
-                      "║  CH02  Fader: 70% (-4.1dB)  Mute: OFF ║\n" +
-                      "║  CH03  Fader: 55% (-9.8dB)  Mute: ON  ║\n" +
-                      "║  CH04  Fader: 80% (-1.2dB)  Mute: OFF ║\n" +
-                      "║  CH05  Fader: 60% (-7.5dB)  Mute: OFF ║\n" +
-                      "║  CH06  Fader: 75% (-2.8dB)  Mute: OFF ║\n" +
-                      "║  CH07  Fader: 45% (-12dB)  Mute: OFF ║\n" +
-                      "║  CH08  Fader: 85% (+0.5dB)  Mute: ON  ║\n" +
-                      "║  CH09  Fader: 50% (-10dB)   Mute: OFF ║\n" +
-                      "║  CH10  Fader: 55% (-8.5dB)  Mute: OFF ║\n" +
-                      "║  CH11  Fader: 65% (-5.2dB)  Mute: OFF ║\n" +
-                      "║  CH12  Fader: 70% (-3.8dB)  Mute: OFF ║\n" +
-                      "║  CH13  Fader: 60% (-7.0dB)  Mute: OFF ║\n" +
-                      "║  CH14  Fader: 75% (-2.5dB)  Mute: OFF ║\n" +
-                      "║  CH15  Fader: 55% (-9.0dB)  Mute: ON  ║\n" +
-                      "║  CH16  Fader: 80% (-1.0dB)  Mute: OFF ║\n" +
-                      "╚══════════════════════════════════════╝\n\n" +
-                      "** Demo Mode - No mixer connected **";
-        tvResult.setText(demo);
-        btnQuery.setEnabled(true);
+
+    private void buildChannelRows() {
+        channelsContainer.removeAllViews();
+        LayoutInflater inflater = LayoutInflater.from(this);
+
+        for (int i = 0; i < 16; i++) {
+            View row = inflater.inflate(R.layout.channel_row, channelsContainer, false);
+
+            TextView tvChNum = row.findViewById(R.id.tv_ch_num);
+            SeekBar sbFader = row.findViewById(R.id.sb_fader);
+            TextView tvDb = row.findViewById(R.id.tv_db);
+            Button btnMute = row.findViewById(R.id.btn_mute);
+
+            int chNum = i + 1;
+            tvChNum.setText(String.format("CH%02d", chNum));
+
+            ChannelState cs = channelStates[i];
+            sbFader.setProgress((int) (cs.fader * 100f));
+            tvDb.setText(cs.faderDbString());
+
+            updateMuteButton(btnMute, cs.muted);
+
+            // Mute button toggle (visual only for now — no command sent)
+            final int ch = chNum;
+            btnMute.setOnClickListener(v -> {
+                // Toggle local state (UI demo)
+                boolean newMuted = !channelStates[ch - 1].muted;
+                channelStates[ch - 1] = channelStates[ch - 1].withMuted(newMuted);
+                updateMuteButton((Button) v, newMuted);
+                Toast.makeText(this, "CH" + String.format("%02d", ch) + " Mute: " + (newMuted ? "ON" : "OFF"), Toast.LENGTH_SHORT).show();
+            });
+
+            channelsContainer.addView(row);
+        }
     }
-    
+
+    private void updateChannelRows(ChannelState[] states) {
+        if (states == null) return;
+
+        for (ChannelState cs : states) {
+            int idx = cs.channelNumber - 1;
+            if (idx < 0 || idx >= 16) continue;
+
+            channelStates[idx] = cs;
+
+            View row = channelsContainer.getChildAt(idx);
+            if (row == null) continue;
+
+            SeekBar sb = row.findViewById(R.id.sb_fader);
+            TextView tvDb = row.findViewById(R.id.tv_db);
+            Button btnMute = row.findViewById(R.id.btn_mute);
+
+            int progress = (int) (cs.fader * 100f);
+            sb.setProgress(progress);
+            tvDb.setText(cs.faderDbString());
+            updateMuteButton(btnMute, cs.muted);
+        }
+    }
+
+    private void updateMuteButton(Button btn, boolean muted) {
+        if (muted) {
+            btn.setBackgroundColor(0xFFFF5722);  // orange
+            btn.setTextColor(Color.WHITE);
+            btn.setText("MUT");
+        } else {
+            btn.setBackgroundColor(0xFF333333);  // dark gray
+            btn.setTextColor(Color.parseColor("#CCCCCC"));
+            btn.setText("MUT");
+        }
+    }
+
+    private void showDemoData() {
+        channelsContainer.setVisibility(View.VISIBLE);
+        buildChannelRows();
+        // Fill with demo values
+        channelStates[2] = channelStates[2].withMuted(true);
+        channelStates[7] = channelStates[7].withMuted(true);
+        for (int i = 0; i < 16; i++) {
+            View row = channelsContainer.getChildAt(i);
+            if (row == null) continue;
+            ChannelState cs = channelStates[i];
+            ((SeekBar) row.findViewById(R.id.sb_fader)).setProgress((int) (cs.fader * 100f));
+            ((TextView) row.findViewById(R.id.tv_db)).setText(cs.faderDbString());
+            updateMuteButton((Button) row.findViewById(R.id.btn_mute), cs.muted);
+        }
+        tvStatus.setText("Demo Mode — no mixer found");
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();

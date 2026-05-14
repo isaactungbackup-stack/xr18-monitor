@@ -13,7 +13,7 @@
             android:id="@+id/tv_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="XR18 Mixer V1.0024"
+            android:text="XR18 Mixer V1.0052"
             android:textSize="14sp"
             android:padding="8dp"
             android:background="#EEEEEE" />
@@ -90,16 +90,17 @@
             android:background="#1a1a1a"
             android:textColor="#00FF00"
             android:layout_marginTop="4dp"
-            android:maxHeight="300dp" />
+            android:maxHeight="200dp"
+            android:textIsSelectable="true" />
 
-        <TextView
-            android:id="@+id/tv_result"
+        <!-- Channel rows container (populated programmatically after query) -->
+        <LinearLayout
+            android:id="@+id/channels_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Channel data will appear here"
-            android:textSize="12sp"
-            android:padding="8dp"
-            android:layout_marginTop="16dp" />
+            android:orientation="vertical"
+            android:layout_marginTop="16dp"
+            android:visibility="gone" />
 
     </LinearLayout>
 </ScrollView>
