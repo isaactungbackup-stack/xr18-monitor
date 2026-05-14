@@ -190,6 +190,7 @@ public class MainActivity extends AppCompatActivity {
             TextView tvChNum = row.findViewById(R.id.tv_ch_num);
             SeekBar sbFader = row.findViewById(R.id.sb_fader);
             TextView tvDb = row.findViewById(R.id.tv_db);
+            TextView tvGain = row.findViewById(R.id.tv_gain);
             Button btnMute = row.findViewById(R.id.btn_mute);
 
             int chNum = i + 1;
@@ -198,6 +199,7 @@ public class MainActivity extends AppCompatActivity {
             ChannelState cs = channelStates[i];
             sbFader.setProgress((int) (cs.fader * 100f));
             tvDb.setText(cs.faderDbString());
+            tvGain.setText(cs.preampGainDbString());
 
             updateMuteButton(btnMute, cs.muted);
 
@@ -229,24 +231,26 @@ public class MainActivity extends AppCompatActivity {
 
             SeekBar sb = row.findViewById(R.id.sb_fader);
             TextView tvDb = row.findViewById(R.id.tv_db);
+            TextView tvGain = row.findViewById(R.id.tv_gain);
             Button btnMute = row.findViewById(R.id.btn_mute);
 
             int progress = (int) (cs.fader * 100f);
             sb.setProgress(progress);
             tvDb.setText(cs.faderDbString());
+            tvGain.setText(cs.preampGainDbString());
             updateMuteButton(btnMute, cs.muted);
         }
     }
 
     private void updateMuteButton(Button btn, boolean muted) {
         if (muted) {
-            btn.setBackgroundColor(0xFFFF5722);  // orange
+            btn.setBackgroundColor(0xFFFF5722);  // orange = muted
             btn.setTextColor(Color.WHITE);
-            btn.setText("MUT");
+            btn.setText("ON");
         } else {
-            btn.setBackgroundColor(0xFF333333);  // dark gray
+            btn.setBackgroundColor(0xFF333333);  // dark gray = not muted
             btn.setTextColor(Color.parseColor("#CCCCCC"));
-            btn.setText("MUT");
+            btn.setText("OFF");
         }
     }
 
@@ -262,6 +266,7 @@ public class MainActivity extends AppCompatActivity {
             ChannelState cs = channelStates[i];
             ((SeekBar) row.findViewById(R.id.sb_fader)).setProgress((int) (cs.fader * 100f));
             ((TextView) row.findViewById(R.id.tv_db)).setText(cs.faderDbString());
+            ((TextView) row.findViewById(R.id.tv_gain)).setText(cs.preampGainDbString());
             updateMuteButton((Button) row.findViewById(R.id.btn_mute), cs.muted);
         }
         tvStatus.setText("Demo Mode — no mixer found");
