@@ -25,6 +25,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnQuery;
     private Button btnDebug;
     private Button btnClearLog;
+    private Button btnCopyLog;
     private LinearLayout channelsContainer;
     private MixerDevice connectedDevice;
 
@@ -57,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
         btnQuery = findViewById(R.id.btn_query);
         btnDebug = findViewById(R.id.btn_debug);
         btnClearLog = findViewById(R.id.btn_clear_log);
+        btnCopyLog = findViewById(R.id.btn_copy_log);
         channelsContainer = findViewById(R.id.channels_container);
 
         tvStatus.setText("XR18 Mixer V1.0061\nEnter IP or search broadcast");
@@ -164,7 +166,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnClearLog.setOnClickListener(v -> {
-            tvOscLog.setText("(cleared)");
+            tvOscLog.setText("");
+        });
+
+        btnCopyLog.setOnClickListener(v -> {
+            String log = tvOscLog.getText().toString();
+            if (!log.isEmpty()) {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                android.content.ClipData clip = android.content.ClipData.newPlainText("XR18 Log", log);
+                cm.setPrimaryClip(clip);
+                android.widget.Toast.makeText(this, "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show();
+            }
         });
     }
 

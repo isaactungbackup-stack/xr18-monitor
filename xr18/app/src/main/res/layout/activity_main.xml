@@ -66,10 +66,18 @@
 
         <Button
             android:id="@+id/btn_clear_log"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Clear Log"
+            android:text="Clear"
             android:layout_marginTop="4dp" />
+
+        <Button
+            android:id="@+id/btn_copy_log"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Copy Log"
+            android:layout_marginTop="4dp"
+            android:layout_marginStart="8dp" />
 
         <TextView
             android:layout_width="match_parent"
