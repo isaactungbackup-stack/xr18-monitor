@@ -44,48 +44,39 @@ public class OSCMessage {
         }
         if (commaIndex < 0) return new Object[0];
 
-        // Align to first argument (4-byte aligned after type tag)
-        // commaIndex = position of ','; type tag is at commaIndex+1
-        // Float argument starts at next 4-byte aligned boundary
+        // Type tag is at commaIndex+1, float data at (commaIndex + 4) & 0x7FFFFFFC
+        int typeTag = data[commaIndex + 1] & 0xFF;
         pos = (commaIndex + 4) & 0x7FFFFFFC;
 
         java.util.ArrayList<Object> list = new java.util.ArrayList<>();
-        while (pos + 4 <= length) {
-            int typeTag = data[pos] & 0xFF;
-            if (typeTag == 0) break; // stop on zero padding
-
-            switch (typeTag) {
-                case 'i': {
-                    int v = ((data[pos + 1] & 0xFF) << 24) |
-                            ((data[pos + 2] & 0xFF) << 16) |
-                            ((data[pos + 3] & 0xFF) << 8) |
-                            (data[pos + 4] & 0xFF);
-                    list.add(v);
-                    break;
-                }
-                case 'f': {
-                    // Float stored as big-endian IEEE 754
-                    // XR18 packet: type tag at byte N, float data at bytes N, N+1, N+2, N+3
-                    // pos already points to type tag location
-                    int b0 = data[pos] & 0xFF;
-                    int b1 = data[pos + 1] & 0xFF;
-                    int b2 = data[pos + 2] & 0xFF;
-                    int b3 = data[pos + 3] & 0xFF;
-                    int bits = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
-                    list.add(Float.intBitsToFloat(bits));
-                    break;
-                }
-                case 'T':
-                    list.add(Boolean.TRUE);
-                    break;
-                case 'F':
-                    list.add(Boolean.FALSE);
-                    break;
-                default:
-                    pos += 4; // advance but don't add
-                    continue;
+        // Single argument per message for XR18
+        switch (typeTag) {
+            case 'i': {
+                int v = ((data[pos] & 0xFF) << 24) |
+                        ((data[pos + 1] & 0xFF) << 16) |
+                        ((data[pos + 2] & 0xFF) << 8) |
+                        (data[pos + 3] & 0xFF);
+                list.add(v);
+                break;
             }
-            pos = (pos + 4) & 0x7FFFFFFC;
+            case 'f': {
+                // Float stored as big-endian IEEE 754
+                int b0 = data[pos] & 0xFF;
+                int b1 = data[pos + 1] & 0xFF;
+                int b2 = data[pos + 2] & 0xFF;
+                int b3 = data[pos + 3] & 0xFF;
+                int bits = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+                list.add(Float.intBitsToFloat(bits));
+                break;
+            }
+            case 'T':
+                list.add(Boolean.TRUE);
+                break;
+            case 'F':
+                list.add(Boolean.FALSE);
+                break;
+            default:
+                break;
         }
         return list.toArray();
     }
