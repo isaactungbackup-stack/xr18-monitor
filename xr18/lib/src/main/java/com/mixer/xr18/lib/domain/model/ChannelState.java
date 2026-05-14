@@ -13,7 +13,8 @@ public class ChannelState {
     public float faderDb;             // dB equivalent
     public boolean muted;
     public float pan;                 // 0.0 (L) – 0.5 (C) – 1.0 (R)
-    public float preampGain;          // dB
+    public float preampGain;          // raw float 0.0-1.0
+    public float preampGainDb;         // gain in dB (raw * 72 - 12, range -12 to +60)
     public boolean eqEnabled;
     public EqBands eqBands;
 
@@ -24,6 +25,7 @@ public class ChannelState {
         this.muted = false;
         this.pan = 0.5f;
         this.preampGain = 0f;
+        this.preampGainDb = -12f;
         this.eqEnabled = false;
         this.eqBands = new EqBands();
     }
@@ -35,6 +37,16 @@ public class ChannelState {
 
     public String faderPercent() {
         return String.format("%.1f%%", fader * 100f);
+    }
+
+    public static float gainToDb(float rawGain) {
+        // XR18 headamp gain: raw 0.0-1.0 maps to -12 to +60 dB
+        return rawGain * 72f - 12f;
+    }
+
+    public String preampGainDbString() {
+        if (preampGainDb <= -90f) return "–∞ dB";
+        return String.format("%+.1f dB", preampGainDb);
     }
 
     public String faderDbString() {

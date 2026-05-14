@@ -286,12 +286,11 @@ public class XR18RepositoryImpl implements MixerRepository {
                         List<ChannelState> channels = new ArrayList<>(state.channels);
                         ChannelState cs = channels.get(idx);
                         cs.preampGain = v;
-                        cs.fader = Math.max(0f, Math.min(1f, v));
-                        cs.faderDb = ChannelState.faderToDb(cs.fader);
+                        cs.preampGainDb = ChannelState.gainToDb(v);
                         channels.set(idx, cs);
                         state.channels = channels;
                         notifyStateChanged();
-                        addRepoLog("SET /headamp/" + ch + "/gain fader=" + cs.fader + "(" + cs.faderDbString() + ")");
+                        addRepoLog("SET /headamp/" + ch + "/gain raw=" + String.format("%.4f", cs.preampGain) + " (" + cs.preampGainDbString() + ")");
                     }
                 } catch (NumberFormatException e) { }
             }
