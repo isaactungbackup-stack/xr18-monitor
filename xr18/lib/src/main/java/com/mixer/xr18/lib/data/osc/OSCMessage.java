@@ -44,8 +44,10 @@ public class OSCMessage {
         }
         if (commaIndex < 0) return new Object[0];
 
-        // Align to first argument (4-byte aligned after ',')
-        pos = commaIndex + 1;  // type tag is right after comma, not 4 bytes later
+        // Align to first argument (4-byte aligned after type tag)
+        // commaIndex = position of ','; type tag is at commaIndex+1
+        // Float argument starts at next 4-byte aligned boundary
+        pos = (commaIndex + 4) & 0x7FFFFFFC;
 
         java.util.ArrayList<Object> list = new java.util.ArrayList<>();
         while (pos + 4 <= length) {
@@ -62,12 +64,14 @@ public class OSCMessage {
                     break;
                 }
                 case 'f': {
-                    // Float stored as little-endian IEEE 754
-                    int b0 = data[pos + 1] & 0xFF;
-                    int b1 = data[pos + 2] & 0xFF;
-                    int b2 = data[pos + 3] & 0xFF;
-                    int b3 = data[pos + 4] & 0xFF;
-                    int bits = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+                    // Float stored as big-endian IEEE 754
+                    // XR18 packet: type tag at byte N, float data at bytes N, N+1, N+2, N+3
+                    // pos already points to type tag location
+                    int b0 = data[pos] & 0xFF;
+                    int b1 = data[pos + 1] & 0xFF;
+                    int b2 = data[pos + 2] & 0xFF;
+                    int b3 = data[pos + 3] & 0xFF;
+                    int bits = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
                     list.add(Float.intBitsToFloat(bits));
                     break;
                 }
