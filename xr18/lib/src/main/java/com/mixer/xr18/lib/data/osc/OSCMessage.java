@@ -30,13 +30,15 @@ public class OSCMessage {
         // Skip address
         int pos = 0;
         while (pos < length && data[pos] != 0) pos++;
+        int addrEnd = pos;
 
         // Align to 4-byte boundary after address
         pos = (pos + 4) & 0x7FFFFFFC;
+        int alignedPos = pos;
 
         // Find the type tag ','
         int commaIndex = -1;
-        for (int i = pos; i < length; i++) {
+        for (int i = alignedPos; i < length; i++) {
             if (data[i] == 0x2C) {
                 commaIndex = i;
                 break;
@@ -66,6 +68,13 @@ public class OSCMessage {
                 int b2 = data[pos + 2] & 0xFF;
                 int b3 = data[pos + 3] & 0xFF;
                 int bits = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+                // DIAGNOSTIC: log commaIndex and float bytes
+                System.out.println("[OSCParse] addrEnd=" + addrEnd + " alignedPos=" + alignedPos
+                    + " commaIndex=" + commaIndex + " typeTag=" + (char)typeTag
+                    + " floatBytes pos=" + pos + " b0=" + String.format("%02X", b0)
+                    + " b1=" + String.format("%02X", b1) + " b2=" + String.format("%02X", b2)
+                    + " b3=" + String.format("%02X", b3) + " bits=" + String.format("%08X", bits)
+                    + " float=" + Float.intBitsToFloat(bits));
                 list.add(Float.intBitsToFloat(bits));
                 break;
             }
