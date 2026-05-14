@@ -230,24 +230,16 @@ public class XR18RepositoryImpl implements MixerRepository {
             return;
         }
 
-        // Handle /ch/xx/mix
+        // Handle /ch/xx/mix and /ch/xx/mix/fader (both use same handler, no byte swap needed)
         Matcher m = chMixPattern.matcher(addr);
-        if (m.matches()) {
+        if (m.find()) {
             int ch = Integer.parseInt(m.group(1));
             if (ch >= 1 && ch <= 16) {
                 int idx = ch - 1;
                 List<ChannelState> channels = new ArrayList<>(state.channels);
                 ChannelState cs = channels.get(idx);
                 if (args.length > 0) {
-                    float rawBits = toFloat(args[0]);
-                    // LE float: bits = b3<<24|b2<<16|b1<<8|b0
-                    int bits = Float.floatToIntBits(rawBits);
-                    int b0 = (bits >> 0) & 0xFF;
-                    int b1 = (bits >> 8) & 0xFF;
-                    int b2 = (bits >> 16) & 0xFF;
-                    int b3 = (bits >> 24) & 0xFF;
-                    int leBits = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
-                    cs.fader = Float.intBitsToFloat(leBits);
+                    cs.fader = toFloat(args[0]);
                     cs.faderDb = ChannelState.faderToDb(cs.fader);
                     addRepoLog("SET /ch/"+ch+"/mix fader="+String.format("%.4f", cs.fader)+" ("+cs.faderDbString()+") mut="+cs.muted);
                 }
