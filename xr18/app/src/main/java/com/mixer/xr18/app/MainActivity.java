@@ -59,7 +59,7 @@ public class MainActivity extends AppCompatActivity {
         btnClearLog = findViewById(R.id.btn_clear_log);
         channelsContainer = findViewById(R.id.channels_container);
 
-        tvStatus.setText("XR18 Mixer V1.0060\nEnter IP or search broadcast");
+        tvStatus.setText("XR18 Mixer V1.0061\nEnter IP or search broadcast");
     }
 
     private void setupListeners() {
