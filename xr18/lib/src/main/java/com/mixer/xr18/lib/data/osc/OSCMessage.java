@@ -19,11 +19,13 @@ public class OSCMessage {
     }
 
     private static String parseAddress(byte[] data, int length) {
+        if (length <= 0) return "";
         int end = 0;
-        while (end < length && data[end] != 0) {
+        while (end < length && end < 1024 && data[end] != 0) {
             end++;
         }
-        return new String(data, 0, end, java.nio.charset.StandardCharsets.UTF_8);
+        int safeEnd = Math.min(end, length);
+        return new String(data, 0, safeEnd, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private static Object[] parseArguments(byte[] data, int length) {
@@ -68,14 +70,20 @@ public class OSCMessage {
                 int b2 = data[pos + 2] & 0xFF;
                 int b3 = data[pos + 3] & 0xFF;
                 int bits = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
-                // DIAGNOSTIC: log commaIndex and float bytes
-                System.out.println("[OSCParse] addrEnd=" + addrEnd + " alignedPos=" + alignedPos
-                    + " commaIndex=" + commaIndex + " typeTag=" + (char)typeTag
-                    + " floatBytes pos=" + pos + " b0=" + String.format("%02X", b0)
-                    + " b1=" + String.format("%02X", b1) + " b2=" + String.format("%02X", b2)
-                    + " b3=" + String.format("%02X", b3) + " bits=" + String.format("%08X", bits)
-                    + " float=" + Float.intBitsToFloat(bits));
                 list.add(Float.intBitsToFloat(bits));
+                break;
+            }
+            case 'b': {
+                // Blob: 4-byte big-endian size, then raw bytes
+                if (pos + 4 <= length) {
+                    int blobSize = ((data[pos] & 0xFF) << 24) |
+                                   ((data[pos + 1] & 0xFF) << 16) |
+                                   ((data[pos + 2] & 0xFF) << 8) |
+                                   (data[pos + 3] & 0xFF);
+                    byte[] blob = new byte[blobSize];
+                    System.arraycopy(data, pos + 4, blob, 0, Math.min(blobSize, length - pos - 4));
+                    list.add(blob);
+                }
                 break;
             }
             case 'T':

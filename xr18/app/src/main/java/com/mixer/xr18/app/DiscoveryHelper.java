@@ -41,8 +41,18 @@ public class DiscoveryHelper {
     }
     private static LogConsumer logConsumer;
 
+    /** Java Consumer interface for live channel state updates. */
+    public interface StateUpdateListener {
+        void onStatesUpdated(ChannelState[] states);
+    }
+    private static StateUpdateListener stateUpdateListener;
+
     public static void setLogConsumer(LogConsumer consumer) {
         logConsumer = consumer;
+    }
+
+    public static void setStateUpdateListener(StateUpdateListener listener) {
+        stateUpdateListener = listener;
     }
 
     public static MixerDevice createDevice(String ip, String name, String model, String fw) {
@@ -217,7 +227,11 @@ public class DiscoveryHelper {
                 repository.setMixerStateListener(new MixerRepository.MixerStateListener() {
                     @Override
                     public void onMixerStateChanged(MixerState state) {
-                        // State updated — will be retrieved after sleep
+                        // Fire live UI updates as messages arrive
+                        if (state != null && state.channels != null && stateUpdateListener != null) {
+                            ChannelState[] arr = state.channels.toArray(new ChannelState[0]);
+                            stateUpdateListener.onStatesUpdated(arr);
+                        }
                     }
                 });
 
@@ -252,6 +266,11 @@ public class DiscoveryHelper {
                 callback.onResult(null);
             }
         });
+    }
+
+    /** Expose current repository state for meter display */
+    public static MixerState getRepositoryState() {
+        return repository != null ? repository.getMixerState() : null;
     }
 
     public static String getDebugMessages() {

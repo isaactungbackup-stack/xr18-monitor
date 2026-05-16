@@ -21,6 +21,9 @@ public class XR18Addresses {
     public static String chEqOn(int ch)       { return "/ch/" + pad(ch) + "/eq/on"; }
     public static String chEqBandG(int ch, int band) { return "/ch/" + pad(ch) + "/eq/" + band + "/g"; }
 
+    // LR Main Meter
+    public static final String LR_METER = "/lr/meter";
+
     private static String pad(int ch) {
         return (ch < 10) ? ("0" + ch) : String.valueOf(ch);
     }

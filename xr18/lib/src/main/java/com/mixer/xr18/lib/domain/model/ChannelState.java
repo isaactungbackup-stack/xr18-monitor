@@ -15,6 +15,8 @@ public class ChannelState {
     public float pan;                 // 0.0 (L) – 0.5 (C) – 1.0 (R)
     public float preampGain;          // raw float 0.0-1.0
     public float preampGainDb;         // gain in dB (raw * 72 - 12, range -12 to +60)
+    public float meter;                 // 0.0–1.0 (linear, from /meters blob)
+    public float meterDb;               // meter in dB
     public boolean eqEnabled;
     public EqBands eqBands;
 
@@ -26,13 +28,17 @@ public class ChannelState {
         this.pan = 0.5f;
         this.preampGain = 0f;
         this.preampGainDb = -12f;
+        this.meter = 0f;
+        this.meterDb = -96f;
         this.eqEnabled = false;
         this.eqBands = new EqBands();
     }
 
     public static float faderToDb(float linear) {
+        // Empirical formula from simultaneous data with X AIR Edit / Mixing Station
+        // UI_dB = 58.1 * raw - 43.5 (linear fit for CH01=-26.4, CH03=0.0)
         if (linear <= 0f) return Float.NEGATIVE_INFINITY;
-        return (float) (20.0 * Math.log10(linear) + 10.0);
+        return (float) (58.1f * linear - 43.5f);
     }
 
     public String faderPercent() {
@@ -44,13 +50,32 @@ public class ChannelState {
         return rawGain * 72f - 12f;
     }
 
+    /** Convert meter value (16-bit signed int, resolution 1/256 dB) to linear 0-1. */
+    public static float meterValueToLinear(short meterValue) {
+        // dB = meterValue / 256.0
+        // linear = 10^(dB/20)
+        if (meterValue <= -9600) return 0f;  // below -96 dB
+        double db = meterValue / 256.0;
+        return (float) Math.pow(10.0, db / 20.0);
+    }
+
+    /** Convert meter value (16-bit signed int) to dB. */
+    public static float meterValueToDb(short meterValue) {
+        return meterValue / 256.0f;
+    }
+
     public String preampGainDbString() {
         if (preampGainDb <= -90f) return "–∞ dB";
         return String.format("%+.1f dB", preampGainDb);
     }
 
+    public String meterDbString() {
+        if (meterDb <= -96f) return "–∞ dB";
+        return String.format("%+.1f dB", meterDb);
+    }
+
     public String faderDbString() {
-        if (faderDb <= -90f) return "–∞ dB";
+        if (fader <= 0.001f) return "–∞ dB";
         return String.format("%+.1f dB", faderDb);
     }
 
@@ -71,7 +96,7 @@ public class ChannelState {
     public ChannelState withFader(float v) { this.fader = v; this.faderDb = faderToDb(v); return this; }
     public ChannelState withMuted(boolean v) { this.muted = v; return this; }
     public ChannelState withPan(float v) { this.pan = v; return this; }
-    public ChannelState withPreampGain(float v) { this.preampGain = v; return this; }
+    public ChannelState withPreampGain(float v) { this.preampGain = v; this.preampGainDb = gainToDb(v); return this; }
     public ChannelState withEqEnabled(boolean v) { this.eqEnabled = v; return this; }
     public ChannelState withEqBands(EqBands v) { this.eqBands = v; return this; }
 }

@@ -30,7 +30,7 @@ public class XR18RepositoryImpl implements MixerRepository {
     private MixerState state = new MixerState();
     private OscClient client;
     private boolean isQuerying = false;
-    private Pattern chMixPattern = Pattern.compile("^/ch/(\\d+)/mix/fader$");
+    private Pattern chMixPattern = Pattern.compile("^/ch/(\\d+)/mix$");
     private Pattern faderPattern = Pattern.compile("^/ch/(\\d+)/mix/fader$");
 
     private MixerStateListener stateListener;
@@ -104,11 +104,14 @@ public class XR18RepositoryImpl implements MixerRepository {
             client = new OscClient(device.ipAddress, 10024);
 
             client.setLogListener((type, msg) -> {
-                if (oscMessageListener != null) oscMessageListener.onOscMessage(type, msg);
+                try {
+                    if (oscMessageListener != null) oscMessageListener.onOscMessage(type, msg);
+                } catch (Exception e) { android.util.Log.e("XR18Repo", "logListener error", e); }
             });
 
             client.setMessageListener(msg -> {
-                handleOSCMessage(msg);
+                try { handleOSCMessage(msg); }
+                catch (Exception e) { android.util.Log.e("XR18Repo", "handleOSCMessage error", e); }
             });
 
             client.start();
@@ -119,6 +122,17 @@ public class XR18RepositoryImpl implements MixerRepository {
 
             // Step 2: Send /xremote to subscribe to periodic updates
             client.send("/xremote");
+            sleep(500);
+
+            // Step 2b: Query LR meter
+            client.send("/lr/meter");
+            addRepoLog("QUERY_SEND: /lr/meter");
+            sleep(500);
+
+            // Step 2c: Subscribe to /meters channel meter stream
+            // /meters ,si "<id>" <meterId>  →  meterId 8 = chnmeterid (per-channel meters)
+            client.send("/meters", "/meters/0", 8);
+            addRepoLog("QUERY_SEND: /meters ,si /meters/0 8");
             sleep(500);
 
             // Step 3: Query all channel main states (wait first for connection stability)
@@ -177,6 +191,7 @@ public class XR18RepositoryImpl implements MixerRepository {
                         float v = toFloat(args[2]);
                         cs.fader = v;
                         cs.faderDb = ChannelState.faderToDb(v);
+                        addRepoLog("XRMT /ch/"+ch+"/mix/fader="+String.format("%.4f",v)+" ("+cs.faderDbString()+")");
                         break;
                     }
                     case "mix/on": {
@@ -227,6 +242,53 @@ public class XR18RepositoryImpl implements MixerRepository {
                 state.channels = channels;
                 notifyStateChanged();
             }
+            return;
+        }
+
+        // Handle /lr/meter (LR main meter values)
+        if (addr.equals("/lr/meter") && args.length >= 2) {
+            state.lrMeterLeft = toFloat(args[0]);
+            state.lrMeterRight = toFloat(args[1]);
+            addRepoLog("SET /lr/meter L=" + String.format("%.4f", state.lrMeterLeft) + " R=" + String.format("%.4f", state.lrMeterRight));
+            notifyStateChanged();
+            return;
+        }
+
+        // Handle /meters/0 (channel meter blob, 8x 16-bit signed ints per channel)
+        // Format: /meters/0 <blob>  where blob = [4-byte big-endian size][n x big-endian 16-bit signed]
+        // For chnmeterid=8: 8 values per channel (pre-fader L/R, gate+comp reduction, post-fader L/R, gate+comp key)
+        if ((addr.equals("/meters/0") || addr.equals("/meters")) && args.length >= 1 && args[0] instanceof byte[]) {
+            byte[] blob = (byte[]) args[0];
+            // Blob: [4-byte BE size][meter0][meter1]... (big-endian 16-bit signed, 2 bytes each)
+            if (blob.length >= 4) {
+                int blobDataLen = ((blob[0] & 0xFF) << 24) |
+                                  ((blob[1] & 0xFF) << 16) |
+                                  ((blob[2] & 0xFF) << 8) |
+                                  (blob[3] & 0xFF);
+                int numMeters = blobDataLen / 2;
+                for (int mi = 0; mi < numMeters && mi < 16; mi++) {
+                    // Little-endian 16-bit signed int (per TouchOSC/X-Air user reports)
+                    // 'E3 A2' → 0xA2E3 (not 0xE3A2)
+                    int b0 = blob[4 + mi * 2] & 0xFF;
+                    int b1 = blob[4 + mi * 2 + 1] & 0xFF;
+                    short meterValue = (short) ((b1 << 8) | b0);
+                    float linear = ChannelState.meterValueToLinear(meterValue);
+
+                    int ch = mi + 1;
+                    List<ChannelState> channels = new ArrayList<>(state.channels);
+                    if (ch >= 1 && ch <= channels.size()) {
+                        ChannelState cs = channels.get(ch - 1);
+                        cs.meter = linear;
+                        cs.meterDb = ChannelState.meterValueToDb(meterValue);
+                        channels.set(ch - 1, cs);
+                        if (ch <= 4) {  // log first 4 channels
+                            addRepoLog("METER /meters/0 ch" + ch + " raw=" + meterValue + " linear=" + String.format("%.3f", linear) + " (" + cs.meterDbString() + ")");
+                        }
+                    }
+                }
+                addRepoLog("METER /meters/0: " + numMeters + " meters decoded");
+            }
+            notifyStateChanged();
             return;
         }
 
@@ -330,13 +392,17 @@ public class XR18RepositoryImpl implements MixerRepository {
     }
 
     private void addRepoLog(String msg) {
-        if (oscMessageListener != null) oscMessageListener.onOscMessage("REPO", msg);
+        try {
+            if (oscMessageListener != null) oscMessageListener.onOscMessage("REPO", msg);
+        } catch (Exception e) { }
     }
 
     private void notifyStateChanged() {
-        if (stateListener != null) {
-            stateListener.onMixerStateChanged(state);
-        }
+        try {
+            if (stateListener != null) {
+                stateListener.onMixerStateChanged(state);
+            }
+        } catch (Exception e) { android.util.Log.e("XR18Repo", "stateListener error", e); }
     }
 
     private void stopAllConnections() {

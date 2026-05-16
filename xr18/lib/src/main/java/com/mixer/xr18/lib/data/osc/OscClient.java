@@ -74,28 +74,19 @@ public class OscClient {
                     socket.receive(pkt);
                     int len = pkt.getLength();
 
-                    // Log raw bytes
-                    StringBuilder hex = new StringBuilder();
-                    StringBuilder ascii = new StringBuilder();
-                    for (int i = 0; i < len; i++) {
-                        int b = buffer[i] & 0xFF;
-                        hex.append(String.format("%02X ", b));
-                        ascii.append((b >= 0x20 && b <= 0x7E) ? (char) b : '.');
-                    }
-                    log("RAW[" + len + "] hex=" + hex.toString());
-                    log("RAW[" + len + "] ascii=" + ascii.toString());
-
+                    log("RECV " + len + " bytes");
                     OSCMessage msg = new OSCMessage(buffer, len);
-                    log("RECV addr=" + msg.address + " args.length=" + msg.args.length);
+                    log("RECV addr=" + msg.address);
 
                     if (messageListener != null) {
-                        messageListener.onMessage(msg);
+                        try { messageListener.onMessage(msg); }
+                        catch (Exception e) { android.util.Log.e("OscClient", "messageListener error", e); }
                     }
 
                 } catch (java.net.SocketTimeoutException e) {
                     // Normal — continue
                 } catch (Exception e) {
-                    log("Recv error: " + e.getMessage());
+                    log("Recv error: " + e.getClass().getSimpleName() + ": " + e.getMessage());
                 }
             }
         } catch (Exception e) {
@@ -109,26 +100,14 @@ public class OscClient {
         try {
             android.util.Log.d("OscClient","sending: "+address);
             byte[] packet = buildOscPacket(address, args);
-
-            StringBuilder hex = new StringBuilder();
-            StringBuilder ascii = new StringBuilder();
-            for (int i = 0; i < packet.length; i++) {
-                int b = packet[i] & 0xFF;
-                hex.append(String.format("%02X ", b));
-                ascii.append((b >= 0x20 && b <= 0x7E) ? (char) b : '.');
-            }
-            log("SEND[" + address + "] len=" + packet.length);
-            log("  hex= " + hex.toString());
-            log("  ascii=" + ascii.toString());
+            log("SEND " + address + " (" + packet.length + " bytes)");
 
             InetAddress addr = InetAddress.getByName(mixerIp);
             DatagramPacket dp = new DatagramPacket(packet, packet.length, addr, mixerPort);
             socket.send(dp);
-            android.util.Log.d("OscClient", "SENDDONE " + address);
-            log("SEND OK to " + mixerIp + ":" + mixerPort);
 
         } catch (Exception e) {
-            log("Send FAILED: " + e.getMessage());
+            log("Send FAILED: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 
