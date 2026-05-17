@@ -273,6 +273,18 @@ public class DiscoveryHelper {
         return repository != null ? repository.getMixerState() : null;
     }
 
+    public static void setMute(int ch, boolean muted) {
+        if (repository != null) {
+            repository.setMute(ch, muted);
+        }
+    }
+
+    public static void setMeterEndian(int mode) {
+        if (repository != null) {
+            repository.setMeterEndianMode(mode);
+        }
+    }
+
     public static String getDebugMessages() {
         StringBuilder sb = new StringBuilder();
         sb.append("=== SENT ===\n");

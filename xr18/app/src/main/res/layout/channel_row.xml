@@ -1,94 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:paddingVertical="6dp"
-    android:paddingHorizontal="4dp"
+    android:id="@+id/ch_row_root"
+    android:layout_width="64dp"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="#1a1a1a"
-    android:layout_marginBottom="2dp">
+    android:layout_marginHorizontal="1dp"
+    android:paddingVertical="2dp">
 
-    <!-- Channel number -->
+    <!-- Channel number label -->
     <TextView
         android:id="@+id/tv_ch_num"
-        android:layout_width="36dp"
-        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_height="14dp"
         android:text="CH01"
-        android:textColor="#AAA"
-        android:textSize="13sp"
-        android:fontFamily="monospace" />
-
-    <!-- Fader seekbar (0-100) -->
-    <SeekBar
-        android:id="@+id/sb_fader"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginHorizontal="8dp"
-        android:max="100"
-        android:progress="70"
-        android:progressTint="#4CAF50"
-        android:thumbTint="#4CAF50" />
-
-    <!-- Fader dB label -->
-    <TextView
-        android:id="@+id/tv_db"
-        android:layout_width="56dp"
-        android:layout_height="wrap_content"
-        android:text="–3.0 dB"
-        android:textColor="#AAFFAA"
+        android:textColor="#CCCCCC"
         android:textSize="11sp"
         android:fontFamily="monospace"
-        android:gravity="end" />
+        android:gravity="center"
+        android:background="#252525" />
 
-    <!-- Gain dB label -->
+    <!-- F value -->
     <TextView
-        android:id="@+id/tv_gain"
-        android:layout_width="48dp"
-        android:layout_height="wrap_content"
-        android:text="+60.0 dB"
-        android:textColor="#FFFF88"
+        android:id="@+id/tv_db"
+        android:layout_width="match_parent"
+        android:layout_height="13dp"
+        android:text="F:–∞"
+        android:textColor="#44FF44"
         android:textSize="10sp"
         android:fontFamily="monospace"
-        android:gravity="end"
-        android:layout_marginStart="4dp" />
+        android:gravity="center"
+        android:layout_marginTop="1dp" />
 
-    <!-- Meter SeekBar -->
-    <SeekBar
-        android:id="@+id/sb_meter"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="0.6"
-        android:layout_marginHorizontal="6dp"
-        android:max="100"
-        android:progress="0"
-        android:progressTint="#FF8800"
-        android:thumbTint="#FF8800" />
-
-    <!-- Meter dB label -->
+    <!-- G value -->
     <TextView
-        android:id="@+id/tv_meter_db"
-        android:layout_width="48dp"
-        android:layout_height="wrap_content"
-        android:text="–∞ dB"
+        android:id="@+id/tv_gain"
+        android:layout_width="match_parent"
+        android:layout_height="13dp"
+        android:text="G:+60.0"
+        android:textColor="#FFFF44"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:layout_marginTop="1dp" />
+
+    <!-- M value (hidden - no longer needed) -->
+    <TextView
+        android:id="@+id/tv_meter_label"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        android:text="M:–∞"
         android:textColor="#FFAA44"
         android:textSize="10sp"
         android:fontFamily="monospace"
-        android:gravity="end"
-        android:layout_marginStart="2dp" />
+        android:gravity="center"
+        android:layout_marginTop="1dp" />
 
-    <!-- Mute indicator -->
+    <!-- Spacer -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp" />
+
+    <!-- Mute button -->
     <TextView
         android:id="@+id/tv_mute"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_marginStart="6dp"
+        android:layout_width="match_parent"
+        android:layout_height="18dp"
         android:gravity="center"
         android:text="MUT"
-        android:textSize="11sp"
+        android:textSize="14sp"
         android:textStyle="bold"
         android:background="#333333"
         android:textColor="#666666" />
+
+    <!-- Meter bar - vertical, below MUTE -->
+    <com.mixer.xr18.app.MeterBarView
+        android:id="@+id/meter_bar"
+        android:layout_width="48dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="2dp" />
 
 </LinearLayout>

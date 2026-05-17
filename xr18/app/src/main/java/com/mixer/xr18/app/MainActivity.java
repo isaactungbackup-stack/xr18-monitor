@@ -1,6 +1,5 @@
 package com.mixer.xr18.app;
 
-import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,26 +11,25 @@ import com.mixer.xr18.app.R;
 import com.mixer.xr18.lib.domain.model.ChannelState;
 import com.mixer.xr18.lib.domain.model.MixerDevice;
 
-import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends AppCompatActivity {
-    private TextView tvStatus;
     private TextView tvOscLog;
-    private EditText etIp;
+    private EditText etIpA, etIpB, etIpC, etIpD;
     private Button btnConnectIp;
     private Button btnDiscover;
-    private Button btnQuery;
     private Button btnDebug;
     private Button btnClearLog;
     private Button btnCopyLog;
     private LinearLayout channelsContainer;
     private MixerDevice connectedDevice;
 
-    // Progress bar for query blocking
+    // Top bar: board number + clock
+    private TextView tvBoard;
+    private TextView tvClock;
     private ProgressBar progressBar;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -84,24 +82,50 @@ public class MainActivity extends AppCompatActivity {
 
         // Start log consumer thread
         startLogThread();
+
+        // Start clock updates
+        mainHandler.postDelayed(clockTick, 500);
+    }
+
+    private final Runnable clockTick = new Runnable() {
+        @Override
+        public void run() {
+            updateClock();
+            mainHandler.postDelayed(this, 1000);
+        }
+    };
+
+    private void updateClock() {
+        if (tvClock == null) return;
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault());
+        tvClock.setText(sdf.format(new java.util.Date()));
+        if (connectedDevice != null) {
+            tvBoard.setText(getString(R.string.app_name));
+        } else {
+            tvBoard.setText("Board: --");
+        }
     }
 
     private void initViews() {
-        tvStatus = findViewById(R.id.tv_status);
         tvOscLog = findViewById(R.id.tv_osc_log);
-        etIp = findViewById(R.id.et_ip);
+        etIpA = findViewById(R.id.et_ip_a);
+        etIpB = findViewById(R.id.et_ip_b);
+        etIpC = findViewById(R.id.et_ip_c);
+        etIpD = findViewById(R.id.et_ip_d);
         btnConnectIp = findViewById(R.id.btn_connect_ip);
         btnDiscover = findViewById(R.id.btn_discover);
-        btnQuery = findViewById(R.id.btn_query);
         btnDebug = findViewById(R.id.btn_debug);
         btnClearLog = findViewById(R.id.btn_clear_log);
         btnCopyLog = findViewById(R.id.btn_copy_log);
         channelsContainer = findViewById(R.id.channels_container);
+        tvBoard = findViewById(R.id.tv_board);
+        tvClock = findViewById(R.id.tv_clock);
 
         // Progress bar (hidden by default)
         progressBar = findViewById(R.id.progress_bar);
 
-        tvStatus.setText("XR18 Mixer V1.0103\nEnter IP or search broadcast");
+        tvBoard.setText("Board: --");
+        tvClock.setText("--:--:--");
     }
 
     private void setLoading(boolean loading) {
@@ -110,13 +134,11 @@ public class MainActivity extends AppCompatActivity {
                 progressBar.setVisibility(View.VISIBLE);
                 btnConnectIp.setEnabled(false);
                 btnDiscover.setEnabled(false);
-                btnQuery.setEnabled(false);
                 btnDebug.setEnabled(false);
             } else {
                 progressBar.setVisibility(View.GONE);
                 btnConnectIp.setEnabled(true);
                 btnDiscover.setEnabled(true);
-                btnQuery.setEnabled(connectedDevice != null);
                 btnDebug.setEnabled(true);
             }
         });
@@ -124,13 +146,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupListeners() {
         btnConnectIp.setOnClickListener(v -> {
-            String ip = etIp.getText().toString().trim();
-            if (ip.isEmpty()) {
+            String ip = etIpA.getText().toString().trim() + "."
+                    + etIpB.getText().toString().trim() + "."
+                    + etIpC.getText().toString().trim() + "."
+                    + etIpD.getText().toString().trim();
+            if (ip.equals("...")) {
                 Toast.makeText(this, "Please enter IP address", Toast.LENGTH_SHORT).show();
                 return;
             }
             clearLog();
-            tvStatus.setText("Connecting to " + ip + "...");
+            tvBoard.setText("Connecting...");
             setLoading(true);
 
             networkExecutor.execute(() -> {
@@ -139,10 +164,12 @@ public class MainActivity extends AppCompatActivity {
                     setLoading(false);
                     if (success) {
                         connectedDevice = DiscoveryHelper.createDevice(ip, "XR18", "XR18", "unknown");
-                        tvStatus.setText("Connected to " + ip + "!\n" + DiscoveryHelper.getDebugMessages());
-                        btnQuery.setEnabled(true);
+                        tvBoard.setText(getString(R.string.app_name));
+                        Toast.makeText(this, "Connected to " + ip, Toast.LENGTH_SHORT).show();
+                        autoQueryChannels();
                     } else {
-                        tvStatus.setText("Cannot reach " + ip + "\nCheck network connection\n" + DiscoveryHelper.getDebugMessages());
+                        tvBoard.setText("Board: --");
+                        Toast.makeText(this, "Cannot reach " + ip, Toast.LENGTH_SHORT).show();
                     }
                 });
             });
@@ -150,72 +177,33 @@ public class MainActivity extends AppCompatActivity {
 
         btnDiscover.setOnClickListener(v -> {
             clearLog();
-            tvStatus.setText("Searching for XR18...");
+            tvBoard.setText("Searching...");
             setLoading(true);
-            btnQuery.setEnabled(false);
 
             networkExecutor.execute(() -> {
                 List<MixerDevice> devices = DiscoveryHelper.discoverSync();
                 mainHandler.post(() -> {
                     setLoading(false);
                     if (devices.isEmpty()) {
-                        tvStatus.setText("No XR18 found\n" + DiscoveryHelper.getDebugMessages());
+                        tvBoard.setText("Board: --");
+                        Toast.makeText(this, "No XR18 found", Toast.LENGTH_SHORT).show();
                         showDemoData();
                     } else {
                         connectedDevice = devices.get(0);
-                        etIp.setText(connectedDevice.getIpAddress());
-                        tvStatus.setText("Found: " + connectedDevice.getName() + "\nIP: " + connectedDevice.getIpAddress() + "\n" + DiscoveryHelper.getDebugMessages());
-                        btnQuery.setEnabled(true);
+                        String ip = connectedDevice.getIpAddress();
+                        String[] parts = ip.replace("127.0.0.1", "192.168.31.6").split("\\.");
+                        if (parts.length == 4) {
+                            etIpA.setText(parts[0]);
+                            etIpB.setText(parts[1]);
+                            etIpC.setText(parts[2]);
+                            etIpD.setText(parts[3]);
+                        }
+                        tvBoard.setText(getString(R.string.app_name));
+                        Toast.makeText(this, "Found: " + connectedDevice.getName(), Toast.LENGTH_SHORT).show();
+                        autoQueryChannels();
                     }
                 });
             });
-        });
-
-        btnQuery.setOnClickListener(v -> {
-            if (connectedDevice != null) {
-                clearLog();
-                logMsgCount.set(0);
-                lastLogLine = "";
-                tvStatus.setText("Querying channels...\n");
-                channelsContainer.removeAllViews();
-                channelsContainer.setVisibility(View.VISIBLE);
-
-                // Build rows immediately with default state
-                buildChannelRows();
-
-                // Disable all buttons and show spinner
-                setLoading(true);
-
-                // Log messages go to queue (network thread → log thread → UI)
-                DiscoveryHelper.setLogConsumer(msg -> {
-                    if (msg != null) logQueue.offer(msg);
-                });
-
-                // State updates → collect and apply on UI thread with throttle
-                DiscoveryHelper.setStateUpdateListener(states -> {
-                    if (states != null) {
-                        pendingStates = states;
-                        scheduleStateApply();
-                    }
-                });
-
-                networkExecutor.execute(() -> {
-                    DiscoveryHelper.queryChannels(connectedDevice, result -> {
-                        mainHandler.post(() -> {
-                            setLoading(false);
-                            if (result != null && result.length > 0) {
-                                // Per-channel staggered update: one CH every 150ms
-                                staggeredUpdate(result, 0);
-                                tvStatus.setText("Connected: " + connectedDevice.getIpAddress() + " | " + result.length + " ch");
-                            } else {
-                                tvStatus.setText("No response from mixer\n" + DiscoveryHelper.getDebugMessages());
-                            }
-                        });
-                    });
-                });
-            } else {
-                tvStatus.setText("No device connected");
-            }
         });
 
         btnDebug.setOnClickListener(v -> {
@@ -236,8 +224,54 @@ public class MainActivity extends AppCompatActivity {
                 android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(android.content.Context.CLIPBOARD_SERVICE);
                 android.content.ClipData clip = android.content.ClipData.newPlainText("XR18 Log", log);
                 cm.setPrimaryClip(clip);
-                Toast.makeText(this, "Log copied to clipboard", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Log copied", Toast.LENGTH_SHORT).show();
             }
+        });
+    }
+
+    private void autoQueryChannels() {
+        if (connectedDevice == null) {
+            Toast.makeText(this, "No device connected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clearLog();
+        logMsgCount.set(0);
+        lastLogLine = "";
+        channelsContainer.removeAllViews();
+        channelsContainer.setVisibility(View.VISIBLE);
+
+        // Build rows immediately with default state
+        buildChannelRows();
+
+        // Disable all buttons and show spinner
+        setLoading(true);
+
+        // Log messages go to queue (network thread → log thread → UI)
+        DiscoveryHelper.setLogConsumer(msg -> {
+            if (msg != null) logQueue.offer(msg);
+        });
+
+        // State updates → collect and apply on UI thread with throttle
+        DiscoveryHelper.setStateUpdateListener(states -> {
+            if (states != null) {
+                pendingStates = states;
+                scheduleStateApply();
+            }
+        });
+
+        networkExecutor.execute(() -> {
+            DiscoveryHelper.queryChannels(connectedDevice, result -> {
+                mainHandler.post(() -> {
+                    setLoading(false);
+                    if (result != null && result.length > 0) {
+                        // Per-channel staggered update: one CH every 150ms
+                        staggeredUpdate(result, 0);
+                        Toast.makeText(this, "Connected: " + result.length + " ch", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "No response from mixer", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            });
         });
     }
 
@@ -252,9 +286,6 @@ public class MainActivity extends AppCompatActivity {
         ChannelState cs = result[index];
         channelStates[index] = cs;
         applyChannelToRow(index, cs);
-
-        // Status update
-        tvStatus.setText("Querying channels... CH" + String.format("%02d", index + 1) + "/16");
 
         // Next CH after 150ms
         mainHandler.postDelayed(() -> staggeredUpdate(result, index + 1), 150);
@@ -284,7 +315,6 @@ public class MainActivity extends AppCompatActivity {
                             logHistory.append("[").append(count).append("] ").append(msg).append("\n");
                             // Trim to max lines to avoid memory bloat
                             int newlineCount = 0;
-                            int cutoff = logHistory.length();
                             for (int i = logHistory.length() - 2; i >= 0 && newlineCount < MAX_DISPLAY_LINES; i--) {
                                 if (logHistory.charAt(i) == '\n') newlineCount++;
                             }
@@ -306,8 +336,10 @@ public class MainActivity extends AppCompatActivity {
                             // UI shows only last line (compact)
                             tvOscLog.setText("[" + c + "] " + line);
                             // Auto-scroll to bottom
-                            int scrollAmount = tvOscLog.getLayout() != null ? tvOscLog.getLayout().getLineTop(tvOscLog.getLineCount()) - tvOscLog.getHeight() : 0;
-                            if (scrollAmount > 0) tvOscLog.scrollTo(0, scrollAmount);
+                            if (tvOscLog.getLayout() != null) {
+                                int scrollAmount = tvOscLog.getLayout().getLineTop(tvOscLog.getLineCount()) - tvOscLog.getHeight();
+                                if (scrollAmount > 0) tvOscLog.scrollTo(0, scrollAmount);
+                            }
                         });
                     }
                 } catch (InterruptedException e) {
@@ -341,23 +373,26 @@ public class MainActivity extends AppCompatActivity {
         for (ChannelState cs : states) {
             int idx = cs.channelNumber - 1;
             if (idx < 0 || idx >= 16) continue;
-            // Use faderDb (not fader) to detect real data:
-            // Default state has fader=0.0 and faderDb=-43.5f (from initial ChannelState).
-            // Real -inf dB from mixer is fader=0.0, and faderDb would be < -43.5 with our formula.
-            // Real data: fader > 0 OR faderDb deviates from initial -43.5.
-            if (cs.fader > 0f || Math.abs(cs.faderDb - (-43.5f)) > 0.5f) {
-                channelStates[idx] = cs;
-                applyChannelToRow(idx, cs);
-            }
+            // Always update — mute/fader/meter must reflect live data regardless of filter
+            channelStates[idx] = cs;
+            applyChannelToRow(idx, cs);
         }
     }
 
     private void applyChannelToRow(int idx, ChannelState cs) {
         View row = channelsContainer.getChildAt(idx);
         if (row == null) return;
+
+        // Update horizontal meter bar
+        MeterBarView meterBar = row.findViewById(R.id.meter_bar);
+        if (meterBar != null) {
+            meterBar.setMeterDb(cs.meterDb);
+        }
+
+        // Fader value as text only (no bar)
         ((TextView) row.findViewById(R.id.tv_db)).setText("F:" + cs.faderDbString());
-        ((TextView) row.findViewById(R.id.tv_gain)).setText(cs.preampGainDbString());
-        ((TextView) row.findViewById(R.id.tv_meter_db)).setText(cs.meterDbString());
+        ((TextView) row.findViewById(R.id.tv_gain)).setText("G:" + cs.preampGainDbString());
+        // REMOVED: meter label no longer needed
         updateMuteIndicator((TextView) row.findViewById(R.id.tv_mute), cs.muted);
     }
 
@@ -372,7 +407,6 @@ public class MainActivity extends AppCompatActivity {
             TextView tvChNum = row.findViewById(R.id.tv_ch_num);
             TextView tvDb = row.findViewById(R.id.tv_db);
             TextView tvGain = row.findViewById(R.id.tv_gain);
-            TextView tvMeterDb = row.findViewById(R.id.tv_meter_db);
             TextView tvMute = row.findViewById(R.id.tv_mute);
 
             int chNum = i + 1;
@@ -380,9 +414,16 @@ public class MainActivity extends AppCompatActivity {
 
             ChannelState cs = channelStates[i];
             tvDb.setText("F:" + cs.faderDbString());
-            tvGain.setText(cs.preampGainDbString());
-            tvMeterDb.setText(cs.meterDbString());
+            tvGain.setText("G:" + cs.preampGainDbString());
+            // REMOVED: meter label no longer needed
             updateMuteIndicator(tvMute, cs.muted);
+            final int ch = chNum;
+            tvMute.setOnClickListener(v -> {
+                boolean newMuted = !channelStates[ch - 1].muted;
+                DiscoveryHelper.setMute(ch, newMuted);
+                channelStates[ch - 1] = channelStates[ch - 1].withMuted(newMuted);
+                updateMuteIndicator(tvMute, newMuted);
+            });
 
             channelsContainer.addView(row);
         }
@@ -399,11 +440,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateMuteIndicator(TextView tv, boolean muted) {
         if (muted) {
-            tv.setBackgroundColor(0xFFFF1744);   // Bright red
-            tv.setTextColor(0xFFFFFFFF);          // White text
-        } else {
-            tv.setBackgroundColor(0xFF333333);   // Dark gray
+            tv.setBackgroundColor(0xFF333333);   // Dark gray → muted (silenced)
             tv.setTextColor(0xFF666666);          // Medium gray text
+        } else {
+            tv.setBackgroundColor(0xFFFF1744);   // Bright red → not muted (audio passing)
+            tv.setTextColor(0xFFFFFFFF);          // White text
         }
     }
 
@@ -417,11 +458,11 @@ public class MainActivity extends AppCompatActivity {
             if (row == null) continue;
             ChannelState cs = channelStates[i];
             ((TextView) row.findViewById(R.id.tv_db)).setText("F:" + cs.faderDbString());
-            ((TextView) row.findViewById(R.id.tv_gain)).setText(cs.preampGainDbString());
-            ((TextView) row.findViewById(R.id.tv_meter_db)).setText(cs.meterDbString());
+            ((TextView) row.findViewById(R.id.tv_gain)).setText("G:" + cs.preampGainDbString());
+            // REMOVED: meter label no longer needed
             updateMuteIndicator((TextView) row.findViewById(R.id.tv_mute), cs.muted);
         }
-        tvStatus.setText("Demo Mode — no mixer found");
+        Toast.makeText(this, "Demo Mode — no mixer found", Toast.LENGTH_SHORT).show();
     }
 
     @Override

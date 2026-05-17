@@ -1,123 +1,225 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:background="#111111">
 
-    <LinearLayout
+    <!-- Channel container: HorizontalScrollView with vertical channel strips -->
+    <HorizontalScrollView
+        android:id="@+id/hsv_channels"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/tv_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="XR18 Mixer V1.0052"
-            android:textSize="14sp"
-            android:padding="8dp"
-            android:background="#EEEEEE" />
+        android:layout_height="match_parent"
+        android:layout_marginTop="38dp"
+        android:layout_marginBottom="28dp"
+        android:fillViewport="true"
+        android:background="#111111">
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:id="@+id/channels_container"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:paddingHorizontal="2dp"
+            android:paddingVertical="4dp" />
 
-            <EditText
-                android:id="@+id/et_ip"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="192.168.31.254"
-                android:text="192.168.31.254"
-                android:inputType="text"
-                android:textSize="14sp" />
+    </HorizontalScrollView>
 
-            <Button
-                android:id="@+id/btn_connect_ip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Connect IP"
-                android:layout_marginStart="8dp" />
-        </LinearLayout>
+    <!-- Top bar: board name+version + clock + control buttons -->
+    <LinearLayout
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="#CC111111"
+        android:layout_gravity="top">
+
+        <TextView
+            android:id="@+id/tv_board"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Board: --"
+            android:textColor="#AAAAAA"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="0dp" />
+
+        <Button
+            android:id="@+id/btn_connect_ip"
+            android:layout_width="52dp"
+            android:layout_height="28dp"
+            android:text="Conn"
+            android:textSize="10sp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
 
         <Button
             android:id="@+id/btn_discover"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Search XR18 (Broadcast)"
-            android:layout_marginTop="8dp" />
-
-        <Button
-            android:id="@+id/btn_query"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Query Channels"
-            android:enabled="false"
-            android:layout_marginTop="8dp" />
-
-        <ProgressBar
-            android:id="@+id/progress_bar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:indeterminate="true"
-            android:visibility="gone"
-            android:layout_marginTop="4dp" />
+            android:layout_width="52dp"
+            android:layout_height="28dp"
+            android:text="Search"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
 
         <Button
             android:id="@+id/btn_debug"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Show Debug Log"
-            android:layout_marginTop="8dp" />
+            android:layout_width="42dp"
+            android:layout_height="28dp"
+            android:text="Debug"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
 
         <Button
             android:id="@+id/btn_clear_log"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="42dp"
+            android:layout_height="28dp"
             android:text="Clear"
-            android:layout_marginTop="4dp" />
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
 
         <Button
             android:id="@+id/btn_copy_log"
+            android:layout_width="48dp"
+            android:layout_height="28dp"
+            android:text="Copy"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/tv_clock"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Copy Log"
-            android:layout_marginTop="4dp"
-            android:layout_marginStart="8dp" />
+            android:text="--:--:--"
+            android:textColor="#00FF44"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="0dp" />
 
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="=== OSC Log ==="
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:layout_marginTop="16dp" />
+            android:text="IP:"
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
 
-        <TextView
-            android:id="@+id/tv_osc_log"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="(empty)"
+        <EditText
+            android:id="@+id/et_ip_a"
+            android:layout_width="56dp"
+            android:layout_height="26dp"
+            android:text="192"
             android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:padding="8dp"
-            android:background="#1a1a1a"
-            android:textColor="#00FF00"
-            android:layout_marginTop="4dp"
-            android:maxHeight="200dp"
-            android:textIsSelectable="true" />
+            android:inputType="number"
+            android:paddingHorizontal="4dp"
+            android:background="#222222"
+            android:textColor="#FF4444" />
 
-        <!-- Channel rows container (populated programmatically after query) -->
-        <LinearLayout
-            android:id="@+id/channels_container"
-            android:layout_width="match_parent"
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="16dp"
-            android:visibility="gone" />
+            android:text="."
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
 
+        <EditText
+            android:id="@+id/et_ip_b"
+            android:layout_width="40dp"
+            android:layout_height="26dp"
+            android:text="168"
+            android:textSize="10sp"
+            android:inputType="number"
+            android:paddingHorizontal="2dp"
+            android:background="#222222"
+            android:textColor="#FF4444" />
+
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="."
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
+
+
+        <EditText
+            android:id="@+id/et_ip_c"
+            android:layout_width="40dp"
+            android:layout_height="26dp"
+            android:text="31"
+            android:textSize="10sp"
+            android:inputType="number"
+            android:paddingHorizontal="2dp"
+            android:background="#222222"
+            android:textColor="#FF4444" />
+
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="."
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
+
+        <EditText
+            android:id="@+id/et_ip_d"
+            android:layout_width="40dp"
+            android:layout_height="26dp"
+            android:text="6"
+            android:textSize="10sp"
+            android:inputType="number"
+            android:paddingHorizontal="2dp"
+            android:background="#222222"
+            android:textColor="#FFFF44" />
     </LinearLayout>
-</ScrollView>
+
+    <!-- OSC Log (hidden by default, shown via Debug) -->
+    <TextView
+        android:id="@+id/tv_osc_log"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="28dp"
+        android:visibility="gone"
+        android:text="(empty)"
+        android:textSize="8sp"
+        android:fontFamily="monospace"
+        android:padding="4dp"
+        android:background="#CC111111"
+        android:textColor="#00CC00"
+        android:textIsSelectable="true" />
+
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:indeterminate="true"
+        android:visibility="gone"
+        android:layout_marginTop="36dp" />
+
+</FrameLayout>

@@ -54,14 +54,22 @@ public class ChannelState {
     public static float meterValueToLinear(short meterValue) {
         // dB = meterValue / 256.0
         // linear = 10^(dB/20)
-        if (meterValue <= -9600) return 0f;  // below -96 dB
+        // XR18 meter range: -96dB (meterValue=-24576) to +12dB (meterValue=+3072)
+        // Clamp only below -96 dB to avoid displaying extremely weak signals as 0
+        if (meterValue <= -24576) return 0f;  // below -96 dB → silent
         double db = meterValue / 256.0;
         return (float) Math.pow(10.0, db / 20.0);
     }
 
     /** Convert meter value (16-bit signed int) to dB. */
     public static float meterValueToDb(short meterValue) {
-        return meterValue / 256.0f;
+        // Clamp: XR18 meters valid range is -96dB to +12dB
+        if (meterValue < -24576) meterValue = -24576;
+        if (meterValue > 3072) meterValue = 3072;
+        float db = meterValue / 256.0f;
+        // NEVER display more than +100dB (hard clamp for UI safety)
+        if (db > 100f) db = 100f;
+        return db;
     }
 
     public String preampGainDbString() {

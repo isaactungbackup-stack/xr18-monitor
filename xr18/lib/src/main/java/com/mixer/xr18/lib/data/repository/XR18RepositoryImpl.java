@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import android.content.SharedPreferences;
 
 /**
  * Implementation of MixerRepository using raw Java sockets and callback listeners.
@@ -31,12 +32,42 @@ public class XR18RepositoryImpl implements MixerRepository {
     private OscClient client;
     private boolean isQuerying = false;
     private Pattern chMixPattern = Pattern.compile("^/ch/(\\d+)/mix$");
+    private Pattern chMixOnPattern = Pattern.compile("^/ch/(\\d+)/mix/on$");
     private Pattern faderPattern = Pattern.compile("^/ch/(\\d+)/mix/fader$");
 
     private MixerStateListener stateListener;
     private OscMessageListener oscMessageListener;
+    private int meterEndianMode = 1; // 0=BE, 1=LE (XR18 uses little-endian)
+    private SharedPreferences prefs;
+
+    private static final String PREFS_NAME = "XR18MixerPrefs";
+    private static final String KEY_ENDIAN = "meterEndian";
+    private static final String KEY_IP = "mixerIp";
+    private static final String KEY_PORT = "mixerPort";
+
+    public void setMeterEndianMode(int mode) {
+        meterEndianMode = mode;
+    }
+    public int getMeterEndianMode() {
+        return meterEndianMode;
+    }
+    public void savePrefs(String ip, int port) {
+        if (prefs != null) {
+            prefs.edit().putString(KEY_IP, ip).putInt(KEY_PORT, port)
+                .putInt(KEY_ENDIAN, meterEndianMode).apply();
+        }
+    }
+    public void loadPrefs() {
+        if (prefs != null) {
+            meterEndianMode = prefs.getInt(KEY_ENDIAN, 0);
+        }
+    }
 
     public XR18RepositoryImpl() {
+    }
+    public void setContext(android.content.Context ctx) {
+        prefs = ctx.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE);
+        loadPrefs();
     }
 
     @Override
@@ -129,10 +160,11 @@ public class XR18RepositoryImpl implements MixerRepository {
             addRepoLog("QUERY_SEND: /lr/meter");
             sleep(500);
 
-            // Step 2c: Subscribe to /meters channel meter stream
-            // /meters ,si "<id>" <meterId>  →  meterId 8 = chnmeterid (per-channel meters)
-            client.send("/meters", "/meters/0", 8);
-            addRepoLog("QUERY_SEND: /meters ,si /meters/0 8");
+            // Step 2c: Subscribe to /meters/1 for continuous all-channel meter stream at ~5Hz
+            // /meters/1 chnmeterid=1 returns all 40 values: 16 mono channels first
+            // Re-subscribe every 200ms to keep the stream alive at 5Hz
+            client.send("/meters", "/meters/1", 1);
+            addRepoLog("QUERY_SEND: /meters ,si /meters/1 1");
             sleep(500);
 
             // Step 3: Query all channel main states (wait first for connection stability)
@@ -148,6 +180,15 @@ public class XR18RepositoryImpl implements MixerRepository {
                 addRepoLog("SEND_DONE: " + addr);
                 sleep(200);
             }
+            // Also query mute state (mix/on) for each channel
+            for (int ch = 1; ch <= 16; ch++) {
+                String chStr = ch < 10 ? ("0" + ch) : String.valueOf(ch);
+                String addrOn = "/ch/" + chStr + "/mix/on";
+                addRepoLog("QUERY_SEND: " + addrOn);
+                android.util.Log.d("XR18Repo", "QUERY_SEND: " + addrOn);
+                client.send(addrOn);
+                sleep(200);
+            }
             addRepoLog("STEP3: /ch/ queries complete, waiting for responses");
             sleep(3000);  // wait 3s for responses
             addRepoLog("STEP3: done waiting, result count = " + state.channels.size());
@@ -160,11 +201,18 @@ public class XR18RepositoryImpl implements MixerRepository {
             }
 
             // Send /xremote every 8 seconds to stay subscribed
-            // This runs on the same executor thread
+            // Re-subscribe /meters/1 every 200ms (5Hz) to keep meter stream alive
+            long lastMeterResubscribe = 0;
             while (isQuerying) {
-                sleep(8000);
+                long now = System.currentTimeMillis();
+                if (now - lastMeterResubscribe >= 200) {
+                    client.send("/meters", "/meters/1", 1);
+                    lastMeterResubscribe = now;
+                }
+                sleep(100);  // sleep 100ms between checks to avoid busy loop
                 if (isQuerying) {
                     client.send("/xremote");
+                    sleep(7700);  // sleep 7.7s, so /xremote is sent every ~8s total
                 }
             }
         });
@@ -196,7 +244,7 @@ public class XR18RepositoryImpl implements MixerRepository {
                     }
                     case "mix/on": {
                         int v = toInt(args[2]);
-                        cs.muted = (v == 0);
+                        cs.muted = (v != 0);  // mix/on=1 = muted, mix/on=0 = audio active
                         addRepoLog("SET /xremote ch="+ch+" mix/on="+v+" mut="+cs.muted);
                         break;
                     }
@@ -232,7 +280,7 @@ public class XR18RepositoryImpl implements MixerRepository {
                         float pan = args.length > 4 ? toFloat(args[4]) : 0.5f;
                         cs.fader = fader;
                         cs.faderDb = ChannelState.faderToDb(fader);
-                        cs.muted = (on == 0);
+                        cs.muted = (on != 0);
                         cs.pan = pan;
                         break;
                     }
@@ -259,7 +307,7 @@ public class XR18RepositoryImpl implements MixerRepository {
         // For chnmeterid=8: 8 values per channel (pre-fader L/R, gate+comp reduction, post-fader L/R, gate+comp key)
         if ((addr.equals("/meters/0") || addr.equals("/meters")) && args.length >= 1 && args[0] instanceof byte[]) {
             byte[] blob = (byte[]) args[0];
-            // Blob: [4-byte BE size][meter0][meter1]... (big-endian 16-bit signed, 2 bytes each)
+            // Blob: [4-byte BE size][meter0][meter1]... (little-endian 16-bit signed per XR18 spec)
             if (blob.length >= 4) {
                 int blobDataLen = ((blob[0] & 0xFF) << 24) |
                                   ((blob[1] & 0xFF) << 16) |
@@ -267,11 +315,14 @@ public class XR18RepositoryImpl implements MixerRepository {
                                   (blob[3] & 0xFF);
                 int numMeters = blobDataLen / 2;
                 for (int mi = 0; mi < numMeters && mi < 16; mi++) {
-                    // Little-endian 16-bit signed int (per TouchOSC/X-Air user reports)
-                    // 'E3 A2' → 0xA2E3 (not 0xE3A2)
+                    // XR18 /meters/0 uses little-endian 16-bit signed (same as /meters/1)
                     int b0 = blob[4 + mi * 2] & 0xFF;
                     int b1 = blob[4 + mi * 2 + 1] & 0xFF;
-                    short meterValue = (short) ((b1 << 8) | b0);
+                    int unsignedVal = (meterEndianMode == 1) ? (b1 << 8) | b0 : (b0 << 8) | b1;
+                    short meterValue = (short) (unsignedVal >= 32768 ? unsignedVal - 65536 : unsignedVal);
+                    // Clamp: XR18 meters are signed 16-bit, resolution 1/256 dB, typical range -9600 to +3072
+                    if (meterValue < -24576) meterValue = -24576;  // clamp to ≥-96 dB
+                    if (meterValue > 3072) meterValue = 3072;     // clamp to ≤+12 dB
                     float linear = ChannelState.meterValueToLinear(meterValue);
 
                     int ch = mi + 1;
@@ -292,9 +343,50 @@ public class XR18RepositoryImpl implements MixerRepository {
             return;
         }
 
-        // Handle /ch/xx/mix and /ch/xx/mix/fader (both use same handler, no byte swap needed)
+        // Handle /meters/1 (all-channels meter blob: 16 mono + aux/fx + bus + fx send + st + monitor)
+        // Blob: [4-byte BE count][little-endian 16-bit signed meter values]
+        if (addr.equals("/meters/1") && args.length >= 1 && args[0] instanceof byte[]) {
+            byte[] blob = (byte[]) args[0];
+            if (blob.length >= 4) {
+                int blobDataLen = ((blob[0] & 0xFF) << 24) |
+                                  ((blob[1] & 0xFF) << 16) |
+                                  ((blob[2] & 0xFF) << 8) |
+                                  (blob[3] & 0xFF);
+                int numMeters = blobDataLen / 2;
+                // chnmeterid=1 returns 40 values: 16 mono channels first
+                // XR18 /meters/1 meter blob: data starts at blob[4] (blob[0:3] = size header)
+                // Byte order: 0=BE, 1=LE (XR18 uses little-endian for /meters/1, verified against ground truth)
+                for (int mi = 0; mi < numMeters && mi < 16; mi++) {
+                    int b0 = blob[4 + mi * 2] & 0xFF;
+                    int b1 = blob[4 + mi * 2 + 1] & 0xFF;
+                    int unsignedVal = (meterEndianMode == 1) ? (b1 << 8) | b0 : (b0 << 8) | b1;
+                    short meterValue = (short) (unsignedVal >= 32768 ? unsignedVal - 65536 : unsignedVal);
+                    // Clamp: XR18 meter range -96dB to +12dB
+                    if (meterValue < -24576) meterValue = -24576;
+                    if (meterValue > 3072) meterValue = 3072;
+                    float linear = ChannelState.meterValueToLinear(meterValue);
+
+                    int ch = mi + 1;
+                    List<ChannelState> channels = new ArrayList<>(state.channels);
+                    if (ch >= 1 && ch <= channels.size()) {
+                        ChannelState cs = channels.get(ch - 1);
+                        cs.meter = linear;
+                        cs.meterDb = ChannelState.meterValueToDb(meterValue);
+                        channels.set(ch - 1, cs);
+                        if (ch <= 4) {
+                            addRepoLog("METER /meters/1 ch" + ch + " raw=" + meterValue + " linear=" + String.format("%.3f", linear) + " (" + cs.meterDbString() + ")");
+                        }
+                    }
+                }
+                addRepoLog("METER /meters/1: " + numMeters + " meters decoded");
+            }
+            notifyStateChanged();
+            return;
+        }
+
+        // Handle /ch/xx/mix (use matches() to avoid matching /ch/xx/mix/fader)
         Matcher m = chMixPattern.matcher(addr);
-        if (m.find()) {
+        if (m.matches()) {
             int ch = Integer.parseInt(m.group(1));
             if (ch >= 1 && ch <= 16) {
                 int idx = ch - 1;
@@ -306,7 +398,8 @@ public class XR18RepositoryImpl implements MixerRepository {
                     addRepoLog("SET /ch/"+ch+"/mix fader="+String.format("%.4f", cs.fader)+" ("+cs.faderDbString()+") mut="+cs.muted);
                 }
                 if (args.length > 1) {
-                    cs.muted = (toInt(args[1]) == 0);
+                    // mix/on=1 = muted, mix/on=0 = audio active
+                    cs.muted = (toInt(args[1]) != 0);
                 }
                 if (args.length > 2) {
                     cs.pan = toFloat(args[2]);
@@ -335,6 +428,26 @@ public class XR18RepositoryImpl implements MixerRepository {
             }
             return;
         }
+
+        // Handle /ch/xx/mix/on — standalone mute state query response
+        // mix/on=1 = muted, mix/on=0 = audio active
+        m = chMixOnPattern.matcher(addr);
+        if (m.matches()) {
+            int ch = Integer.parseInt(m.group(1));
+            if (ch >= 1 && ch <= 16 && args.length > 0) {
+                int idx = ch - 1;
+                int onVal = toInt(args[0]);
+                List<ChannelState> channels = new ArrayList<>(state.channels);
+                ChannelState cs = channels.get(idx);
+                cs.muted = (onVal != 0);
+                addRepoLog("QUERY_RESP /ch/"+ch+"/mix/on="+onVal+" muted="+cs.muted);
+                channels.set(idx, cs);
+                state.channels = channels;
+                notifyStateChanged();
+            }
+            return;
+        }
+
 
         // Handle /headamp/xx/gain
         if (addr.startsWith("/headamp") && addr.contains("/gain") && args.length > 0) {
@@ -430,4 +543,15 @@ public class XR18RepositoryImpl implements MixerRepository {
         stopAllConnections();
         executor.shutdownNow();
     }
+
+    /** Send mute toggle command to mixer.
+     * mix/on=1 = mute on (channel silenced), mix/on=0 = mute off (audio passes).
+     * @param ch 1-16, @param muted true=muted (mix/on=1), false=unmuted (mix/on=0) */
+    public void setMute(int ch, boolean muted) {
+        if (client != null) {
+            client.send("/ch/" + ch + "/mix/on", muted ? 1 : 0);
+            addRepoLog("SEND /ch/" + ch + "/mix/on=" + (muted ? 1 : 0));
+        }
+    }
+
 }

@@ -10,8 +10,8 @@ android {
         applicationId = "com.mixer.xr18.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 110
-        versionName = "1.0111"
+        versionCode = 145
+        versionName = "1.0145"
     }
 
     compileOptions {
