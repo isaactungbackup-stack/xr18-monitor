@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ch_row_root"
+    android:layout_width="64dp"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#1a1a1a"
+    android:layout_marginHorizontal="1dp"
+    android:paddingVertical="2dp">
+
+    <!-- Channel number label -->
+    <TextView
+        android:id="@+id/tv_ch_num"
+        android:layout_width="match_parent"
+        android:layout_height="14dp"
+        android:text="CH01"
+        android:textColor="#CCCCCC"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:background="#252525" />
+
+    <!-- F value -->
+    <TextView
+        android:id="@+id/tv_db"
+        android:layout_width="match_parent"
+        android:layout_height="13dp"
+        android:text="F:–∞"
+        android:textColor="#44FF44"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:layout_marginTop="1dp" />
+
+    <!-- G value -->
+    <TextView
+        android:id="@+id/tv_gain"
+        android:layout_width="match_parent"
+        android:layout_height="13dp"
+        android:text="G:+60.0"
+        android:textColor="#FFFF44"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:layout_marginTop="1dp" />
+
+    <!-- Spacer -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp" />
+
+    <!-- Mute button -->
+    <TextView
+        android:id="@+id/tv_mute"
+        android:layout_width="match_parent"
+        android:layout_height="18dp"
+        android:gravity="center"
+        android:text="MUT"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:background="#333333"
+        android:textColor="#666666" />
+
+    <!-- Meter bar - vertical, below MUTE -->
+    <com.mixer.wing.app.MeterBarView
+        android:id="@+id/meter_bar"
+        android:layout_width="48dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="2dp" />
+
+</LinearLayout>

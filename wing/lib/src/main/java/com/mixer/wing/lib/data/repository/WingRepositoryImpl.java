@@ -44,6 +44,10 @@ public class WingRepositoryImpl implements MixerRepository {
     public WingRepositoryImpl() {
     }
 
+    public void setDeviceIp(String ip) {
+        this.client = new OscClient(ip, 10024);
+    }
+
     @Override
     public void discoverDevices(long timeoutMs, DiscoveryCallback callback) {
         executor.submit(() -> {

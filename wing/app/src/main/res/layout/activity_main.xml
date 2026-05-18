@@ -1,74 +1,261 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:background="#111111">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="WING Mixer Control"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp"/>
-
-    <!-- Connection Status -->
-    <TextView
-        android:id="@+id/tv_connection"
+    <!-- Channel container: HorizontalScrollView with vertical channel strips -->
+    <HorizontalScrollView
+        android:id="@+id/hsv_channels"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Not connected"
-        android:textSize="14sp"
-        android:textColor="#666"
-        android:layout_marginBottom="8dp"/>
+        android:layout_height="match_parent"
+        android:layout_marginTop="38dp"
+        android:layout_marginBottom="28dp"
+        android:fillViewport="true"
+        android:background="#111111">
 
-    <!-- Device List -->
-    <ListView
-        android:id="@+id/list_devices"
-        android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:layout_marginBottom="8dp"/>
+        <LinearLayout
+            android:id="@+id/channels_container"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:paddingHorizontal="2dp"
+            android:paddingVertical="4dp" />
 
-    <!-- Status Text -->
-    <TextView
-        android:id="@+id/tv_status"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:text=""
-        android:textSize="12sp"
-        android:fontFamily="monospace"
-        android:scrollbars="vertical"
-        android:layout_marginBottom="8dp"/>
+    </HorizontalScrollView>
 
-    <!-- Buttons -->
+    <!-- Top bar: board name+version + clock + control buttons -->
     <LinearLayout
+        android:id="@+id/top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_height="36dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="#CC111111"
+        android:layout_gravity="top">
+
+        <TextView
+            android:id="@+id/tv_board"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Board: --"
+            android:textColor="#AAAAAA"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="0dp" />
+
+        <Button
+            android:id="@+id/btn_connect_ip"
+            android:layout_width="52dp"
+            android:layout_height="28dp"
+            android:text="Conn"
+            android:textSize="10sp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
 
         <Button
             android:id="@+id/btn_discover"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Discover"/>
+            android:layout_width="52dp"
+            android:layout_height="28dp"
+            android:text="Search"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
 
         <Button
-            android:id="@+id/btn_connect"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Connect"/>
+            android:id="@+id/btn_debug"
+            android:layout_width="42dp"
+            android:layout_height="28dp"
+            android:text="Debug"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
 
         <Button
-            android:id="@+id/btn_read_status"
+            android:id="@+id/btn_clear_log"
+            android:layout_width="42dp"
+            android:layout_height="28dp"
+            android:text="Clear"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
+
+        <Button
+            android:id="@+id/btn_copy_log"
+            android:layout_width="48dp"
+            android:layout_height="28dp"
+            android:text="Copy"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
+
+        <View
             android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Bank selector buttons -->
+        <Button
+            android:id="@+id/btn_bank_1_16"
+            android:layout_width="36dp"
+            android:layout_height="24dp"
+            android:text="1-16"
+            android:textSize="9sp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:backgroundTint="#444444" />
+
+        <Button
+            android:id="@+id/btn_bank_17_32"
+            android:layout_width="36dp"
+            android:layout_height="24dp"
+            android:text="17-32"
+            android:textSize="9sp"
+            android:layout_marginStart="2dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
+
+        <Button
+            android:id="@+id/btn_bank_33_48"
+            android:layout_width="36dp"
+            android:layout_height="24dp"
+            android:text="33-48"
+            android:textSize="9sp"
+            android:layout_marginStart="2dp"
+            android:paddingHorizontal="2dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="0dp" />
+
+        <TextView
+            android:id="@+id/tv_clock"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Read Status"/>
+            android:text="--:--:--"
+            android:textColor="#00FF44"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="0dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="IP:"
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
+
+        <EditText
+            android:id="@+id/et_ip_a"
+            android:layout_width="56dp"
+            android:layout_height="26dp"
+            android:text="192"
+            android:textSize="10sp"
+            android:inputType="number"
+            android:paddingHorizontal="4dp"
+            android:background="#222222"
+            android:textColor="#FF4444" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="."
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
+
+        <EditText
+            android:id="@+id/et_ip_b"
+            android:layout_width="40dp"
+            android:layout_height="26dp"
+            android:text="168"
+            android:textSize="10sp"
+            android:inputType="number"
+            android:paddingHorizontal="2dp"
+            android:background="#222222"
+            android:textColor="#FF4444" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="."
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
+
+        <EditText
+            android:id="@+id/et_ip_c"
+            android:layout_width="40dp"
+            android:layout_height="26dp"
+            android:text="31"
+            android:textSize="10sp"
+            android:inputType="number"
+            android:paddingHorizontal="2dp"
+            android:background="#222222"
+            android:textColor="#FF4444" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="."
+            android:textColor="#FF4444"
+            android:textSize="10sp" />
+
+        <EditText
+            android:id="@+id/et_ip_d"
+            android:layout_width="40dp"
+            android:layout_height="26dp"
+            android:text="100"
+            android:textSize="10sp"
+            android:inputType="number"
+            android:paddingHorizontal="2dp"
+            android:background="#222222"
+            android:textColor="#FFFF44" />
 
     </LinearLayout>
 
-</LinearLayout>
+    <!-- OSC Log (hidden by default, shown via Debug) -->
+    <TextView
+        android:id="@+id/tv_osc_log"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="28dp"
+        android:visibility="gone"
+        android:text="(empty)"
+        android:textSize="8sp"
+        android:fontFamily="monospace"
+        android:padding="4dp"
+        android:background="#CC111111"
+        android:textColor="#00CC00"
+        android:textIsSelectable="true" />
+
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:indeterminate="true"
+        android:visibility="gone"
+        android:layout_marginTop="36dp" />
+
+</FrameLayout>
