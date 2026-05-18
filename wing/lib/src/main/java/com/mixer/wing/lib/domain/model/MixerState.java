@@ -28,4 +28,8 @@ public class MixerState {
         this.lrMeterLeft = 0f;
         this.lrMeterRight = 0f;
     }
+
+    public ChannelState[] getChannels() {
+        return channels.toArray(new ChannelState[0]);
+    }
 }
