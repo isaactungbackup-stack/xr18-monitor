@@ -7,7 +7,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
+import android.util.DisplayMetrics;
 import android.view.View;
+import android.view.WindowManager;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
 import android.widget.SeekBar;
@@ -82,6 +85,23 @@ public class ChannelDetailDialog extends DialogFragment {
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        Dialog dialog = getDialog();
+        if (dialog != null) {
+            Window window = dialog.getWindow();
+            if (window != null) {
+                WindowManager.LayoutParams params = window.getAttributes();
+                DisplayMetrics dm = new DisplayMetrics();
+                window.getWindowManager().getDefaultDisplay().getMetrics(dm);
+                params.width = (int)(dm.widthPixels * 0.9);
+                params.height = (int)(dm.heightPixels * 0.8);
+                window.setAttributes(params);
+            }
+        }
+    }
+
+    @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setStyle(DialogFragment.STYLE_NORMAL, android.R.style.Theme_Material_Dialog);
@@ -105,6 +125,14 @@ public class ChannelDetailDialog extends DialogFragment {
             );
         }
         return dialog;
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
+        return inflater.inflate(R.layout.channel_detail, container, false);
     }
 
     @Override
@@ -297,8 +325,10 @@ public class ChannelDetailDialog extends DialogFragment {
 
                         // Parse /meters/1 blob
                         if (addr.equals("/meters/1") || addr.equals("/meters")) {
+                            android.util.Log.i(TAG, "Received /meters/1 len=" + len);
                             int chMeter = parseMeterBlob(buffer, len, channel);
                             float db = chMeter / 256f;
+                            android.util.Log.i(TAG, "Meter raw=" + chMeter + " = " + db + " dB for CH" + channel);
                             float meterDb = Math.max(-96f, Math.min(12f, db));
 
                             // Update UI
@@ -310,6 +340,7 @@ public class ChannelDetailDialog extends DialogFragment {
 
                             // Push energy into spectrogram
                             float[] energy = SpectrogramView.energyFromMeterDb(meterDb);
+                            android.util.Log.i(TAG, "CH" + channel + " meter=" + db + " dB, energy overall=" + energy[32]);
                             final float[] finalEnergy = energy;
                             mainHandler.post(() -> {
                                 if (spectrogramView != null) {

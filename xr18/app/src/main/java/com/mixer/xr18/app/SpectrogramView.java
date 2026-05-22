@@ -155,10 +155,15 @@ public class SpectrogramView extends View {
      */
     public static float[] energyFromMeterDb(float meterDb) {
         float[] energy = new float[FREQ_BINS];
-        // Simulate spectrum: low freq ~ -18dB, mid ~ -6dB, high ~ -12dB (relative)
         // Map meterDb (-96 to +12) to a 0-1 range for overall scale
-        float overall = (meterDb + 60f) / 72f; // rough 0-1 scale
-        overall = Math.max(0f, Math.min(1f, overall));
+        float overall;
+        if (meterDb <= -90f) {
+            // Near-silence: give a tiny non-zero energy so spectrogram shows "quiet" not black
+            overall = 0.02f + (float)(Math.random() * 0.03f);
+        } else {
+            overall = (meterDb + 60f) / 72f; // rough 0-1 scale
+            overall = Math.max(0f, Math.min(1f, overall));
+        }
 
         for (int i = 0; i < FREQ_BINS; i++) {
             // Pink noise shape: energy ~ 1/sqrt(f) falloff from low to high
@@ -193,51 +198,58 @@ public class SpectrogramView extends View {
         // ── 1. Draw RTA bars ──────────────────────────────────────────
         drawRTA(canvas, 0f, 0f, w, rtaHeightPx);
 
-        // ── 2. Scroll spectrogram bitmap down by 1 row ─────────────
-        scrollSpectrogramDown();
+        // ── 2. Scroll spectrogram bitmap up by 1 row ─────────────
+        scrollSpectrogramUp();
 
-        // ── 3. Push new energy row into spectrogram at top ───────────
+        // ── 3. Push new energy row into spectrogram at bottom ──────
         pushEnergyToSpectrogram();
 
-        // ── 4. Draw spectrogram bitmap ──────────────────────────────
-        spectrogramRect.set(0f, spectroTop, w, h);
-        canvas.drawBitmap(spectrogramBmp, null, spectrogramRect, spectrogramPaint);
+        // ── 4. Commit spectrogram pixels to bitmap ─────────────────
+        commitPixels();
 
-        // ── 5. Draw EQ curve overlay ────────────────────────────────
+        // ── 5. Draw spectrogram bitmap (with Y-axis flip for correct visual orientation) ──
+        spectrogramRect.set(0f, spectroTop, w, h);
+        canvas.save();
+        canvas.scale(1f, -1f, w / 2f, (spectroTop + h) / 2f); // flip Y around center
+        canvas.drawBitmap(spectrogramBmp, null, spectrogramRect, spectrogramPaint);
+        canvas.restore();
+
+        // ── 6. Draw EQ curve overlay ────────────────────────────────
         drawEQCurve(canvas, 0f, spectroTop, w, h - spectroTop);
 
-        // ── 6. Draw frequency grid lines ────────────────────────────
+        // ── 7. Draw frequency grid lines ────────────────────────────
         drawFreqGrid(canvas, 0f, spectroTop, w, h - spectroTop);
-
-        // Commit spectrogram pixels before drawing
-        commitPixels();
 
         // Schedule next frame
         postInvalidateOnAnimation();
     }
 
-    private void scrollSpectrogramDown() {
-        // Copy each row down by 1 (from bottom to top to avoid overwrite)
-        for (int y = TIME_ROWS - 1; y >= 1; y--) {
-            System.arraycopy(spectrogramPixels, (y - 1) * FREQ_BINS,
+    private void scrollSpectrogramUp() {
+        // Copy each row up by 1 to make room at BOTTOM for new data
+        // (row 1 → row 0, row 2 → row 1..., avoiding overwrite)
+        for (int y = 0; y < TIME_ROWS - 1; y++) {
+            System.arraycopy(spectrogramPixels, (y + 1) * FREQ_BINS,
                              spectrogramPixels, y * FREQ_BINS, FREQ_BINS);
         }
-        // Row 0 will be filled by pushEnergyToSpectrogram
+        // Bottom row (TIME_ROWS-1) will be filled by pushEnergyToSpectrogram
     }
 
     private void pushEnergyToSpectrogram() {
-        // Use current rtaLevels as the new top row
-        int rowOffset = 0;
+        // Write new energy to BOTTOM row (will appear at top when flipped vertically)
+        int bottomRow = TIME_ROWS - 1;
+        int rowOffset = bottomRow * FREQ_BINS;
         for (int x = 0; x < FREQ_BINS; x++) {
-            float level = x < FREQ_BINS ? rtaLevels[x] : 0f;
+            float level = x < rtaLevels.length ? rtaLevels[x] : 0f;
             spectrogramPixels[rowOffset + x] = energyToPixel(level);
         }
     }
 
     /**
      * Map 0-1 energy level to a BGRA pixel color.
-     * Color map: 0.0 → deep blue (#0000AA)
-     *            0.25 → cyan (#00CCCC)
+     * Color map: 0.0 → black
+     *            0.02 → deep blue (#000044)
+     *            0.1 → blue (#0044CC)
+     *            0.3 → cyan (#00CCCC)
      *            0.5 → yellow (#CCCC00)
      *            0.75 → orange (#FF8800)
      *            1.0 → red (#FF0000)
@@ -246,29 +258,44 @@ public class SpectrogramView extends View {
         float e = Math.max(0f, Math.min(1f, energy));
 
         int r, g, b;
-        if (e < 0.25f) {
-            float t = e / 0.25f;
+        if (e < 0.02f) {
+            // 幾乎黑 → 深藍
+            float t = e / 0.02f;
+            r = 0;
+            g = 0;
+            b = (int)(0x44 * t);
+        } else if (e < 0.1f) {
+            // 深藍 → 藍
+            float t = (e - 0.02f) / 0.08f;
+            r = 0;
+            g = 0;
+            b = (int)(0x44 + (0xCC - 0x44) * t);
+        } else if (e < 0.3f) {
+            // 藍 → 青
+            float t = (e - 0.1f) / 0.2f;
             r = 0;
             g = (int)(0xCC * t);
-            b = (int)(0xAA + (0xCC - 0xAA) * t);
+            b = 0xCC;
         } else if (e < 0.5f) {
-            float t = (e - 0.25f) / 0.25f;
+            // 青 → 黃
+            float t = (e - 0.3f) / 0.2f;
             r = (int)(0xCC * t);
             g = 0xCC;
             b = (int)(0xCC * (1f - t));
         } else if (e < 0.75f) {
+            // 黃 → 橙 → 紅
             float t = (e - 0.5f) / 0.25f;
             r = 0xCC + (int)((0xFF - 0xCC) * t);
-            g = (int)(0xCC * (1f - t * 0.5f));
+            g = (int)(0xCC * (1f - t * 0.7f));
             b = 0;
         } else {
+            // 橙/紅 → 亮紅
             float t = (e - 0.75f) / 0.25f;
             r = 0xFF;
-            g = (int)(0x66 * (1f - t));
+            g = (int)(0x44 * (1f - t));
             b = 0;
         }
 
-        // BGRA format for ARGB_8888
         return (0xFF << 24) | (b << 16) | (g << 8) | r;
     }
 
@@ -289,12 +316,10 @@ public class SpectrogramView extends View {
 
             // Color: green at bottom → yellow → red at top based on level
             int color;
-            if (level < 0.4f) {
-                float t = level / 0.4f;
-                // Boost green at low levels so bars aren't near-black
-                int gr = (int)(0x33 + 0xCC * t);
-                int rd = (int)(0x22 * t);
-                color = (0xFF << 24) | (0x00 << 16) | (gr << 8) | rd;
+            if (level < 0.3f) {
+                // 只給綠色分量，低能量時不要同時給紅色
+                int gr = (int)(level * 3f * 0xFF);
+                color = (0xFF << 24) | (0x00 << 16) | (gr << 8) | 0x00;
             } else if (level < 0.7f) {
                 float t = (level - 0.4f) / 0.3f;
                 int rd = 0x44 + (int)(0xBB * t);
@@ -318,6 +343,18 @@ public class SpectrogramView extends View {
                 float peakY = y + h - peak * h;
                 canvas.drawRect(barX + gap / 2, peakY - 1f, barX + barW - gap / 2, peakY + 1f, rtaPeakPaint);
             }
+        }
+
+        // RTA subdivision tick lines (match spectrogram grid)
+        float[] subFreqs = {30f, 70f, 200f, 400f, 600f, 800f,
+                            2000f, 4000f, 6000f, 8000f,
+                            12000f, 15000f, 18000f};
+        gridPaint.setColor(0x11FFFFFF);
+        gridPaint.setStrokeWidth(0.5f);
+        for (float freq : subFreqs) {
+            float px = freqToBinPos(freq, w);
+            if (px < 1f || px > w - 1f) continue;
+            canvas.drawLine(x + px, y, x + px, y + h, gridPaint);
         }
 
         // Frequency labels (at key points)
@@ -399,21 +436,32 @@ public class SpectrogramView extends View {
     }
 
     private void drawFreqGrid(Canvas canvas, float x, float y, float w, float h) {
-        gridPaint.setColor(0x22FFFFFF);
-        gridPaint.setStrokeWidth(1f);
+        // ── Subdivision lines (finer, more transparent) ───────────────────────
+        float[] subFreqs = {30f, 70f, 200f, 400f, 600f, 800f,
+                            2000f, 4000f, 6000f, 8000f,
+                            12000f, 15000f, 18000f};
+        gridPaint.setColor(0x11FFFFFF);
+        gridPaint.setStrokeWidth(0.5f);
+        for (float freq : subFreqs) {
+            float px = freqToBinPos(freq, w);
+            if (px < 0 || px > w) continue;
+            canvas.drawLine(x + px, y, x + px, y + h, gridPaint);
+        }
 
-        // Draw vertical lines at octave frequencies
+        // ── Main octave lines ──────────────────────────────────────────────
         float[] octaveFreqs = {20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f, 20000f};
+        gridPaint.setColor(0x33FFFFFF);
+        gridPaint.setStrokeWidth(1f);
         for (float freq : octaveFreqs) {
             float px = freqToBinPos(freq, w);
             if (px < 0 || px > w) continue;
             canvas.drawLine(x + px, y, x + px, y + h, gridPaint);
         }
 
-        // Draw horizontal dB lines at -60, -40, -20, 0 dB
-        // (only labels, actual grid lines optional)
+        // ── Horizontal dB lines ──────────────────────────────────────────
         float[] dbLines = {-60f, -40f, -20f, 0f};
         gridPaint.setColor(0x15FFFFFF);
+        gridPaint.setStrokeWidth(0.5f);
         for (float db : dbLines) {
             float py = y + h - ((db + 96f) / 96f) * h;
             if (py < y || py > y + h) continue;

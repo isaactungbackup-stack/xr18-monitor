@@ -174,8 +174,8 @@ public class XR18RepositoryImpl implements MixerRepository {
             // Step 2c: Subscribe to /meters/1 for continuous all-channel meter stream at ~5Hz
             // /meters/1 chnmeterid=1 returns all 40 values: 16 mono channels first
             // Re-subscribe every 200ms to keep the stream alive at 5Hz
-            client.send("/meters", "/meters/1", 1);
-            addRepoLog("QUERY_SEND: /meters ,si /meters/1 1");
+            client.sendSubscribe("/meters/1", 1);
+            addRepoLog("QUERY_SEND: /meters/1 chnmeterid=1");
             sleep(500);
 
             // Step 3: Query all channel main states (wait first for connection stability)
@@ -217,7 +217,7 @@ public class XR18RepositoryImpl implements MixerRepository {
             while (isQuerying) {
                 long now = System.currentTimeMillis();
                 if (now - lastMeterResubscribe >= 200) {
-                    client.send("/meters", "/meters/1", 1);
+                    client.sendSubscribe("/meters/1", 1);
                     lastMeterResubscribe = now;
                 }
                 sleep(100);  // sleep 100ms between checks to avoid busy loop

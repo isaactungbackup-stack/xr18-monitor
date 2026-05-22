@@ -101,9 +101,16 @@ public class OscClient {
     public void send(String address, Object... args) {
         try {
             byte[] packet = buildOscPacket(address, args);
-            String argStr = args.length > 0 ? " " + java.util.Arrays.toString(args) : "";
-            log("SEND " + address + argStr + " (" + packet.length + " bytes)");
+            sendRaw(packet);
+        } catch (Exception e) {
+            log("Send FAILED: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
 
+    /** Send a raw pre-built OSC packet directly. Used for subscribe packets with string args. */
+    public void sendRaw(byte[] packet) {
+        try {
+            log("SEND raw " + packet.length + " bytes");
             InetAddress addr = InetAddress.getByName(mixerIp);
             final DatagramPacket dp = new DatagramPacket(packet, packet.length, addr, mixerPort);
             sendExecutor.execute(() -> {
@@ -113,10 +120,57 @@ public class OscClient {
                     android.util.Log.e("OscClient", "send failed", e);
                 }
             });
-
         } catch (Exception e) {
-            log("Send FAILED: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            log("SendRaw FAILED: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * Build and send an OSC subscribe message.
+     * Used for /meters subscription: /meters <subscribePath> <unused> <chnmeterid>
+     * Format: /meters ,ssi <subscribePath> <unused> <chnmeterid>
+     */
+    public void sendSubscribe(String subscribePath, int chnmeterid) {
+        byte[] packet = buildSubscribePacket(subscribePath, chnmeterid);
+        sendRaw(packet);
+    }
+
+    private byte[] buildSubscribePacket(String subscribePath, int chnmeterid) {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try {
+            // Address: /meters
+            byte[] addrBytes = "/meters".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            baos.write(addrBytes, 0, addrBytes.length);
+            baos.write(0);
+            while (baos.size() % 4 != 0) baos.write(0);
+
+            // Type tag: ,ssi
+            baos.write(44); // ','
+            baos.write(115); // 's'
+            baos.write(115); // 's'
+            baos.write(105); // 'i'
+            while (baos.size() % 4 != 0) baos.write(0);
+
+            // String arg 1: subscription path (e.g. /meters/1)
+            byte[] subPathBytes = subscribePath.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            baos.write(subPathBytes, 0, subPathBytes.length);
+            baos.write(0);
+            while (baos.size() % 4 != 0) baos.write(0);
+
+            // String arg 2: unused ( XR18 expects this, can be /none or /null)
+            byte[] unusedBytes = "/none".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            baos.write(unusedBytes, 0, unusedBytes.length);
+            baos.write(0);
+            while (baos.size() % 4 != 0) baos.write(0);
+
+            // Int arg: chnmeterid
+            int val = chnmeterid;
+            baos.write((val >> 24) & 0xFF);
+            baos.write((val >> 16) & 0xFF);
+            baos.write((val >> 8) & 0xFF);
+            baos.write(val & 0xFF);
+        } catch (Exception e) { }
+        return baos.toByteArray();
     }
 
     public void stop() {
