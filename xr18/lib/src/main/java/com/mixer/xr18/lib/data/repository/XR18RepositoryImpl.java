@@ -131,11 +131,9 @@ public class XR18RepositoryImpl implements MixerRepository {
         // Update device in state
         state.device = device;
 
-        // Create OscClient SYNCHRONously on calling thread (before executor),
-        // so setMute() can safely use it immediately after this method returns.
-        client = new OscClient(device.ipAddress, 10024);
-
         executor.submit(() -> {
+            client = new OscClient(device.ipAddress, 10024);
+
             client.setLogListener((type, msg) -> {
                 try {
                     if (oscMessageListener != null) oscMessageListener.onOscMessage(type, msg);
@@ -157,15 +155,6 @@ public class XR18RepositoryImpl implements MixerRepository {
             client.send("/xremote");
             sleep(500);
 
-            // Step 2b: Subscribe to per-channel mute change notifications via /ch/xx/mix/on/subscribe
-            // This ensures XR18 pushes mute changes when they occur on the mixer
-            for (int ch = 1; ch <= 16; ch++) {
-                String chStr = ch < 10 ? ("0" + ch) : String.valueOf(ch);
-                client.send("/ch/" + chStr + "/mix/on/subscribe");
-                addRepoLog("QUERY_SEND: /ch/" + chStr + "/mix/on/subscribe");
-            }
-            sleep(500);
-
             // Step 2b: Query LR meter
             client.send("/lr/meter");
             addRepoLog("QUERY_SEND: /lr/meter");
@@ -174,8 +163,8 @@ public class XR18RepositoryImpl implements MixerRepository {
             // Step 2c: Subscribe to /meters/1 for continuous all-channel meter stream at ~5Hz
             // /meters/1 chnmeterid=1 returns all 40 values: 16 mono channels first
             // Re-subscribe every 200ms to keep the stream alive at 5Hz
-            client.sendSubscribe("/meters/1", 1);
-            addRepoLog("QUERY_SEND: /meters/1 chnmeterid=1");
+            client.send("/meters", "/meters/1", 1);
+            addRepoLog("QUERY_SEND: /meters ,si /meters/1 1");
             sleep(500);
 
             // Step 3: Query all channel main states (wait first for connection stability)
@@ -217,7 +206,7 @@ public class XR18RepositoryImpl implements MixerRepository {
             while (isQuerying) {
                 long now = System.currentTimeMillis();
                 if (now - lastMeterResubscribe >= 200) {
-                    client.sendSubscribe("/meters/1", 1);
+                    client.send("/meters", "/meters/1", 1);
                     lastMeterResubscribe = now;
                 }
                 sleep(100);  // sleep 100ms between checks to avoid busy loop
@@ -559,21 +548,10 @@ public class XR18RepositoryImpl implements MixerRepository {
      * mix/on=1 = mute on (channel silenced), mix/on=0 = mute off (audio passes).
      * @param ch 1-16, @param muted true=muted (mix/on=1), false=unmuted (mix/on=0) */
     public void setMute(int ch, boolean muted) {
-        addRepoLog("setMute called: ch=" + ch + " muted=" + muted + " client=" + (client != null ? "OK" : "NULL"));
-        if (client == null) {
-            addRepoLog("setMute FAILED: client is null - queryChannelStates not called yet");
-            return;
+        if (client != null) {
+            client.send("/ch/" + ch + "/mix/on", muted ? 1 : 0);
+            addRepoLog("SEND /ch/" + ch + "/mix/on=" + (muted ? 1 : 0));
         }
-        // Send mute command
-        client.send("/ch/" + ch + "/mix/on", muted ? 1 : 0);
-        addRepoLog("SEND /ch/" + ch + "/mix/on=" + (muted ? 1 : 0));
-
-        // Immediately query back the mute state to confirm XR18 received it
-        // This forces XR18 to respond with current mute status
-        sleep(100);
-        String chStr = ch < 10 ? ("0" + ch) : String.valueOf(ch);
-        client.send("/ch/" + chStr + "/mix/on");
-        addRepoLog("QUERY_AFTERMUTE: /ch/" + chStr + "/mix/on (confirming)");
     }
 
 }

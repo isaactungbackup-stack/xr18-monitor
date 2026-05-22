@@ -20,8 +20,7 @@
             android:layout_height="match_parent"
             android:orientation="horizontal"
             android:paddingHorizontal="2dp"
-            android:paddingVertical="4dp"
-            android:descendantFocusability="blocksDescendants" />
+            android:paddingVertical="4dp" />
 
     </HorizontalScrollView>
 

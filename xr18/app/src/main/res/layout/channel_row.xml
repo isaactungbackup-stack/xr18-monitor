@@ -72,9 +72,7 @@
         android:textSize="14sp"
         android:textStyle="bold"
         android:background="#333333"
-        android:textColor="#666666"
-        android:clickable="true"
-        android:focusable="true" />
+        android:textColor="#666666" />
 
     <!-- Meter bar - vertical, below MUTE -->
     <com.mixer.xr18.app.MeterBarView

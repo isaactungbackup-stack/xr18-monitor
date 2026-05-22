@@ -87,13 +87,6 @@ public class MainActivity extends AppCompatActivity {
         mainHandler.postDelayed(clockTick, 500);
     }
 
-    /** Called when user taps a channel row (CH button) to open the spectrogram dialog. */
-    public void openChannelDetail(int channel) {
-        String ip = (connectedDevice != null) ? connectedDevice.getIpAddress() : "";
-        ChannelDetailDialog dialog = ChannelDetailDialog.newInstance(channel, ip);
-        dialog.show(getSupportFragmentManager(), "channel_detail_" + channel);
-    }
-
     private final Runnable clockTick = new Runnable() {
         @Override
         public void run() {
@@ -393,7 +386,7 @@ public class MainActivity extends AppCompatActivity {
         // Update horizontal meter bar
         MeterBarView meterBar = row.findViewById(R.id.meter_bar);
         if (meterBar != null) {
-            meterBar.setMeterDb(cs.faderDb);
+            meterBar.setMeterDb(cs.meterDb);
         }
 
         // Fader value as text only (no bar)
@@ -425,17 +418,12 @@ public class MainActivity extends AppCompatActivity {
             // REMOVED: meter label no longer needed
             updateMuteIndicator(tvMute, cs.muted);
             final int ch = chNum;
-            android.util.Log.i("MainActivity", "buildChannelRows: registering mute click for ch=" + ch + " row=" + i);
             tvMute.setOnClickListener(v -> {
-                android.util.Log.i("MainActivity", "Mute clicked! ch=" + ch + " currently muted=" + channelStates[ch - 1].muted);
                 boolean newMuted = !channelStates[ch - 1].muted;
                 DiscoveryHelper.setMute(ch, newMuted);
                 channelStates[ch - 1] = channelStates[ch - 1].withMuted(newMuted);
                 updateMuteIndicator(tvMute, newMuted);
             });
-
-            // Tap anywhere on the channel row to open the spectrogram / channel detail dialog
-            row.setOnClickListener(v -> openChannelDetail(ch));
 
             channelsContainer.addView(row);
         }
