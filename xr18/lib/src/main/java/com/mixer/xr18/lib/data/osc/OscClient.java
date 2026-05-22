@@ -22,6 +22,7 @@ public class OscClient {
 
     private DatagramSocket socket;
     private ExecutorService recvExecutor;
+    private ExecutorService sendExecutor;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     /** Called for each received OSC message. Runs on receive thread. */
@@ -53,6 +54,7 @@ public class OscClient {
         if (isRunning.getAndSet(true)) return;
 
         recvExecutor = Executors.newSingleThreadExecutor();
+        sendExecutor = Executors.newSingleThreadExecutor();
         recvExecutor.execute(this::receiveLoop);
     }
 
@@ -98,13 +100,19 @@ public class OscClient {
 
     public void send(String address, Object... args) {
         try {
-            android.util.Log.d("OscClient","sending: "+address);
             byte[] packet = buildOscPacket(address, args);
-            log("SEND " + address + " (" + packet.length + " bytes)");
+            String argStr = args.length > 0 ? " " + java.util.Arrays.toString(args) : "";
+            log("SEND " + address + argStr + " (" + packet.length + " bytes)");
 
             InetAddress addr = InetAddress.getByName(mixerIp);
-            DatagramPacket dp = new DatagramPacket(packet, packet.length, addr, mixerPort);
-            socket.send(dp);
+            final DatagramPacket dp = new DatagramPacket(packet, packet.length, addr, mixerPort);
+            sendExecutor.execute(() -> {
+                try {
+                    socket.send(dp);
+                } catch (Exception e) {
+                    android.util.Log.e("OscClient", "send failed", e);
+                }
+            });
 
         } catch (Exception e) {
             log("Send FAILED: " + e.getClass().getSimpleName() + ": " + e.getMessage());
@@ -117,6 +125,10 @@ public class OscClient {
         if (recvExecutor != null) {
             recvExecutor.shutdownNow();
             recvExecutor = null;
+        }
+        if (sendExecutor != null) {
+            sendExecutor.shutdownNow();
+            sendExecutor = null;
         }
     }
 
