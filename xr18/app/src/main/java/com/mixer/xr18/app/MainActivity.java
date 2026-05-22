@@ -393,7 +393,7 @@ public class MainActivity extends AppCompatActivity {
         // Update horizontal meter bar
         MeterBarView meterBar = row.findViewById(R.id.meter_bar);
         if (meterBar != null) {
-            meterBar.setMeterDb(cs.meterDb);
+            meterBar.setMeterDb(cs.faderDb);
         }
 
         // Fader value as text only (no bar)
